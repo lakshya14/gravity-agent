@@ -15,8 +15,7 @@
           <span class="brand-text">Gravity</span>
         </div>
         <div class="navbar-links">
-          <a v-if="!isAuthenticated" href="/api/auth/login" class="login-link">Login to Salesforce</a>
-          <a v-else href="#" @click.prevent="logout" class="logout-link">Logout</a>
+          <a v-if="isAuthenticated" href="#" @click.prevent="logout" class="logout-link">Logout</a>
         </div>
       </div>
     </nav>
@@ -40,9 +39,12 @@
         </p>
 
         <!-- Search Bar -->
-        <div class="search-wrapper animate-fade-in-up delay-300">
-          <a href="/api/auth/login" class="search-btn login-btn">
-            Connect to Salesforce to Start
+        <div class="search-wrapper animate-fade-in-up delay-300 login-buttons">
+          <a href="/api/auth/login?env=production" class="search-btn login-btn">
+            Connect to Production
+          </a>
+          <a href="/api/auth/login?env=sandbox" class="search-btn login-btn sandbox-btn">
+            Connect to Sandbox
           </a>
         </div>
       </div>
@@ -346,6 +348,14 @@ const features = [
   margin-bottom: var(--space-2xl);
 }
 
+.login-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
@@ -423,6 +433,18 @@ const features = [
 .search-btn:hover {
   transform: scale(1.05);
   box-shadow: var(--shadow-glow-cyan);
+}
+
+.sandbox-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+  animation: none;
+}
+
+.sandbox-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 
 .search-hints {

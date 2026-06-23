@@ -5,7 +5,13 @@ export default defineEventHandler(async (event) => {
   
   const clientId = config.salesforceClientId
   const redirectUri = 'http://localhost:3000/api/auth/callback'
-  const loginUrl = config.salesforceLoginUrl
+  
+  const query = getQuery(event)
+  const env = query.env as string
+  let loginUrl = config.salesforceLoginUrl as string
+  if (env === 'sandbox') {
+    loginUrl = 'https://test.salesforce.com'
+  }
 
   if (!clientId) {
     throw createError({ statusCode: 500, statusMessage: 'Salesforce Client ID not configured.' })
@@ -15,9 +21,9 @@ export default defineEventHandler(async (event) => {
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
-  // Store the code_verifier in session
+  // Store the code_verifier and dynamic loginUrl in session
   const session = await useSession(event, { password: config.sessionPassword });
-  await session.update({ codeVerifier });
+  await session.update({ codeVerifier, loginUrl });
 
   const authUrl = new URL(`${loginUrl}/services/oauth2/authorize`)
   authUrl.searchParams.append('response_type', 'code')

@@ -7,9 +7,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = useRuntimeConfig()
-  const tokenUrl = `${config.salesforceLoginUrl}/services/oauth2/token`
-  
   const session = await useSession(event, { password: config.sessionPassword })
+  
+  const loginUrl = session.data.loginUrl || config.salesforceLoginUrl
+  const tokenUrl = `${loginUrl}/services/oauth2/token`
+  
   const codeVerifier = session.data.codeVerifier
   if (!codeVerifier) {
     throw createError({ statusCode: 400, statusMessage: 'Missing PKCE code verifier' })
