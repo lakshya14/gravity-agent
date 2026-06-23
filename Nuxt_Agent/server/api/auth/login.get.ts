@@ -5,9 +5,15 @@ export default defineEventHandler(async (event) => {
   
   const clientId = config.salesforceClientId
   
-  const host = getRequestHeader(event, 'x-forwarded-host') || getRequestHeader(event, 'host')
-  const protocol = getRequestHeader(event, 'x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https')
-  const redirectUri = config.appBaseUrl ? `${config.appBaseUrl}/api/auth/callback` : `${protocol}://${host}/api/auth/callback`
+  let host = getRequestHeader(event, 'x-forwarded-host') || getRequestHeader(event, 'host') || ''
+  if (host.includes(',')) host = host.split(',')[0].trim()
+  
+  let protocol = getRequestHeader(event, 'x-forwarded-proto') || ''
+  if (protocol.includes(',')) protocol = protocol.split(',')[0].trim()
+  if (!protocol) protocol = host.includes('localhost') ? 'http' : 'https'
+  
+  const base = config.appBaseUrl ? config.appBaseUrl.replace(/\/$/, '') : `${protocol}://${host}`
+  const redirectUri = `${base}/api/auth/callback`
   
   const query = getQuery(event)
   const env = query.env as string
