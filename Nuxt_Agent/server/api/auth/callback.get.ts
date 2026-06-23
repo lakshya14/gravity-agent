@@ -17,8 +17,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing PKCE code verifier' })
   }
 
-  const currentUrl = getRequestURL(event)
-  const redirectUri = `${currentUrl.protocol}//${currentUrl.host}/api/auth/callback`
+  const host = getRequestHeader(event, 'x-forwarded-host') || getRequestHeader(event, 'host')
+  const protocol = getRequestHeader(event, 'x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https')
+  const redirectUri = `${protocol}://${host}/api/auth/callback`
 
   const params = new URLSearchParams()
   params.append('grant_type', 'authorization_code')
