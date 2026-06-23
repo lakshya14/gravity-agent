@@ -17,11 +17,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing PKCE code verifier' })
   }
 
+  const currentUrl = getRequestURL(event)
+  const redirectUri = `${currentUrl.protocol}//${currentUrl.host}/api/auth/callback`
+
   const params = new URLSearchParams()
   params.append('grant_type', 'authorization_code')
   params.append('client_id', config.salesforceClientId)
   params.append('client_secret', config.salesforceClientSecret)
-  params.append('redirect_uri', 'http://localhost:3000/api/auth/callback')
+  params.append('redirect_uri', redirectUri)
   params.append('code', code)
   params.append('code_verifier', codeVerifier)
 
