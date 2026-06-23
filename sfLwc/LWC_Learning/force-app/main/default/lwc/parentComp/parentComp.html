@@ -1,0 +1,18 @@
+<template>
+    <lightning-card title="Parent Component">
+      <div class="slds-box slds-var-m-around_large">
+        This is <strong>Parent</strong> Component
+        <div>
+          <lightning-button label="Parent Button" onclick={handleParentSubmit}></lightning-button>
+        </div>
+        <div><strong>Message Sent: </strong>{messageSend}</div>
+        <div><strong>Message Received: </strong>{messageReceived}</div>
+      </div>
+      <br />
+    </lightning-card>
+  
+    <!-- Child -->
+    <div>
+      <c-child-comp message-received={messageSend}></c-child-comp>
+    </div>
+  </template>

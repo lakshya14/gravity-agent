@@ -1,0 +1,59 @@
+{
+  "Opportunity": {
+    "description": "Represents a sale or pending deal.",
+    "fields": [
+      { "name": "Id", "type": "id", "label": "Opportunity ID" },
+      { "name": "Name", "type": "string", "label": "Name" },
+      { "name": "StageName", "type": "picklist", "label": "Stage" },
+      { "name": "Amount", "type": "currency", "label": "Amount" },
+      { "name": "CloseDate", "type": "date", "label": "Close Date" },
+      { "name": "IsClosed", "type": "boolean", "label": "Closed" },
+      { "name": "IsWon", "type": "boolean", "label": "Won" },
+      { "name": "AccountId", "type": "reference", "label": "Account ID" }
+    ],
+    "exampleQueries": [
+      {
+        "intent": "Show me recent closed won opportunities",
+        "soql": "SELECT Id, Name, Amount, CloseDate FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT 5"
+      },
+      {
+        "intent": "Show me all open opportunities",
+        "soql": "SELECT Id, Name, StageName, Amount, CloseDate FROM Opportunity WHERE IsClosed = false ORDER BY Amount DESC NULLS LAST LIMIT 10"
+      }
+    ]
+  },
+  "Account": {
+    "description": "Represents an individual account, which is an organization or person involved with your business.",
+    "fields": [
+      { "name": "Id", "type": "id", "label": "Account ID" },
+      { "name": "Name", "type": "string", "label": "Account Name" },
+      { "name": "Industry", "type": "picklist", "label": "Industry" },
+      { "name": "Phone", "type": "phone", "label": "Account Phone" },
+      { "name": "Type", "type": "picklist", "label": "Account Type" },
+      { "name": "AnnualRevenue", "type": "currency", "label": "Annual Revenue" }
+    ],
+    "exampleQueries": [
+      {
+        "intent": "Find accounts with highest revenue",
+        "soql": "SELECT Id, Name, Industry, AnnualRevenue FROM Account WHERE AnnualRevenue != null ORDER BY AnnualRevenue DESC LIMIT 5"
+      }
+    ]
+  },
+  "Contact": {
+    "description": "Represents a contact, which is a person associated with an account.",
+    "fields": [
+      { "name": "Id", "type": "id", "label": "Contact ID" },
+      { "name": "FirstName", "type": "string", "label": "First Name" },
+      { "name": "LastName", "type": "string", "label": "Last Name" },
+      { "name": "Email", "type": "email", "label": "Email" },
+      { "name": "Phone", "type": "phone", "label": "Phone" },
+      { "name": "AccountId", "type": "reference", "label": "Account ID" }
+    ],
+    "exampleQueries": [
+      {
+        "intent": "Find a contact by email",
+        "soql": "SELECT Id, FirstName, LastName, Email, Phone, Account.Name FROM Contact WHERE Email = 'example@example.com'"
+      }
+    ]
+  }
+}

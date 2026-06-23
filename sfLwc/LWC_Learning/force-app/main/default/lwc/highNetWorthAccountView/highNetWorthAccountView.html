@@ -1,0 +1,19 @@
+<template>
+    <lightning-card  title="Account Details">
+    <template if:true={showError}>
+        <div class="slds-text-color_error slds-m-around_medium">
+            {HNW_Error_Label}
+        </div>
+    </template>
+    <template if:false={showError}>
+        <div class="slds-p-horizontal_samll">
+          <lightning-record-form object-api-name="Account" record-id={recordId} 
+                                 layout-type="Full"
+                                 mode={mode}
+                                 columns="2">
+          </lightning-record-form>
+        </div>
+    </template>
+    
+</lightning-card>
+</template>

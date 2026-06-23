@@ -1,0 +1,26 @@
+<template>
+  <template lwc:if={nameField}>lol</template>
+  <template lwc:if={contactsData}>lol</template>
+  <template lwc:if={contactsData}>
+  <lightning-card title="Contacts List" icon-name="standard:contact">
+    <lightning-datatable
+        key-field="id"
+        data={contactsData}
+        columns={columns}
+        hide-checkbox-column="true">
+    </lightning-datatable>
+</lightning-card>
+</template>
+  <lightning-card title="Record Details" icon-name="standard:account">
+      <div class="slds-grid">
+        <div class="slds-col slds-size_1-of-2">
+          <lightning-input class="name" value={nameField}></lightning-input>
+          <lightning-input class="site"  field-name={websiteField}></lightning-input>
+        </div>
+        <div class="slds-col slds-size_1-of-2">
+          <!-- More lightning-input-field components here -->
+        </div>
+      </div>
+      <lightning-button onclick={handleAccountCreated} label="Create Account"></lightning-button>
+  </lightning-card>
+  </template>
