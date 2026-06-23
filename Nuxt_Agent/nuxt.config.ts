@@ -4,6 +4,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
 
   runtimeConfig: {
+    appBaseUrl: process.env.APP_BASE_URL,
     geminiApiKey: process.env.GEMINI_API_KEY,
     geminiApiKey2: process.env.GEMINI_API_KEY2,
     salesforceClientId: process.env.SALESFORCE_CLIENT_ID,
