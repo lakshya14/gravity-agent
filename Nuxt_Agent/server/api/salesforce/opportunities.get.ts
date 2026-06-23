@@ -20,8 +20,18 @@ export default defineEventHandler(async (event) => {
     ]);
 
     // Handle case where query failed and returned error object from the service
-    if (recentRecords.error) throw new Error(recentRecords.error);
-    if (closedRecords.error) throw new Error(closedRecords.error);
+    const checkError = (records: any) => {
+      if (records.error) {
+        const is401 = records.details && records.details.includes('401');
+        throw createError({ 
+          statusCode: is401 ? 401 : 500, 
+          statusMessage: is401 ? 'Session expired. Please login again.' : `${records.error}: ${records.details}` 
+        });
+      }
+    };
+    
+    checkError(recentRecords);
+    checkError(closedRecords);
 
     return {
       recent: recentRecords,
@@ -29,9 +39,12 @@ export default defineEventHandler(async (event) => {
     };
   } catch (error: any) {
     console.error('Error fetching opportunities:', error);
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 || error.statusCode === 401) {
       throw createError({ statusCode: 401, statusMessage: 'Session expired. Please login again.' });
     }
-    throw createError({ statusCode: 500, statusMessage: 'Failed to fetch opportunities from Salesforce.' });
+    throw createError({ 
+      statusCode: error.statusCode || 500, 
+      statusMessage: error.statusMessage || error.message || 'Failed to fetch opportunities from Salesforce.' 
+    });
   }
 });

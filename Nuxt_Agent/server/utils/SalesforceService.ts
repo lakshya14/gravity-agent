@@ -21,8 +21,9 @@ export class SalesforceService {
       });
       return res.records;
     } catch (err: any) {
-      console.error('SOQL Error:', err);
-      return { error: 'Failed to execute query', details: err.message || err.toString() };
+      console.error('SOQL Error:', err.data || err.message);
+      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
+      return { error: 'Failed to execute query', details };
     }
   }
 
@@ -43,8 +44,9 @@ export class SalesforceService {
         fields: res.fields.map((f: any) => ({ name: f.name, type: f.type, label: f.label }))
       };
     } catch (err: any) {
-      console.error('Describe Error:', err);
-      return { error: `Failed to describe object ${objectName}`, details: err.message || err.toString() };
+      console.error('Describe Error:', err.data || err.message);
+      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
+      return { error: `Failed to describe object ${objectName}`, details };
     }
   }
 
@@ -66,8 +68,9 @@ export class SalesforceService {
       });
       return { success: true, message: `Successfully updated ${objectName} ${id}.` };
     } catch (err: any) {
-      console.error('Update Error:', err);
-      return { error: `Failed to update ${objectName}`, details: err.message || err.toString() };
+      console.error('Update Error:', err.data || err.message);
+      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
+      return { error: `Failed to update ${objectName}`, details };
     }
   }
 
@@ -92,8 +95,9 @@ export class SalesforceService {
       }
       return { matches };
     } catch (err: any) {
-      console.error('Find Object Error:', err);
-      return { error: `Failed to search objects`, details: err.message || err.toString() };
+      console.error('Find Object Error:', err.data || err.message);
+      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
+      return { error: `Failed to search objects`, details };
     }
   }
 }

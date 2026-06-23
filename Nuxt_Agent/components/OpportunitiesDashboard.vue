@@ -25,7 +25,7 @@
         </div>
         <div class="card-content">
           <ul class="opp-list">
-            <li v-for="opp in recentOpps" :key="opp.Id" class="opp-item">
+            <li v-for="opp in recentOpps" :key="opp.Id" class="opp-item" @click="openModal(opp.Id)">
               <div class="opp-main">
                 <span class="opp-name">{{ opp.Name }}</span>
                 <span class="opp-stage" :class="getStageClass(opp.StageName)">{{ opp.StageName }}</span>
@@ -48,7 +48,7 @@
         </div>
         <div class="card-content">
           <ul class="opp-list">
-            <li v-for="opp in closedOpps" :key="opp.Id" class="opp-item">
+            <li v-for="opp in closedOpps" :key="opp.Id" class="opp-item" @click="openModal(opp.Id)">
               <div class="opp-main">
                 <span class="opp-name">{{ opp.Name }}</span>
                 <span class="opp-stage" :class="opp.IsWon ? 'stage-won' : 'stage-lost'">
@@ -65,6 +65,13 @@
         </div>
       </div>
     </div>
+
+    <OpportunityModal 
+      :is-open="isModalOpen" 
+      :opportunity-id="selectedOpportunityId" 
+      @close="closeModal" 
+      @saved="onModalSaved" 
+    />
   </div>
 </template>
 
@@ -74,7 +81,22 @@ const { data, pending, error, refresh } = await useFetch('/api/salesforce/opport
 const recentOpps = computed(() => data.value?.recent || [])
 const closedOpps = computed(() => data.value?.closed || [])
 
+const isModalOpen = ref(false)
+const selectedOpportunityId = ref(null)
 
+function openModal(id) {
+  selectedOpportunityId.value = id
+  isModalOpen.value = true
+}
+
+function closeModal() {
+  isModalOpen.value = false
+  selectedOpportunityId.value = null
+}
+
+async function onModalSaved() {
+  await refresh()
+}
 
 function getStageClass(stage) {
   const s = (stage || '').toLowerCase()
@@ -166,6 +188,7 @@ function getStageClass(stage) {
   border-radius: var(--radius-md);
   border: 1px solid rgba(255,255,255,0.05);
   transition: all var(--transition-fast);
+  cursor: pointer;
 }
 
 .opp-item:hover {
