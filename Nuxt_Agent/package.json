@@ -16,8 +16,11 @@
   },
   "dependencies": {
     "@google/genai": "^2.9.0",
+    "@pinia-plugin-persistedstate/nuxt": "^1.2.1",
+    "@pinia/nuxt": "^0.11.3",
     "marked": "^18.0.5",
     "nuxt": "^4.4.8",
+    "pinia": "^3.0.4",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0"
   }

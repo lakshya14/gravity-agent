@@ -119,8 +119,12 @@
 </template>
 
 <script setup>
+import { storeToRefs } from 'pinia';
+import { useChatStore } from '~/stores/chat';
 
-const isOpen = ref(false)
+const chatStore = useChatStore();
+const { isOpen, messages } = storeToRefs(chatStore);
+
 const isTyping = ref(false)
 const inputMessage = ref('')
 const messagesContainer = ref(null)
@@ -135,19 +139,8 @@ onMounted(async () => {
   }
 })
 
-
-
-const messages = ref([
-  {
-    role: 'bot',
-    content:
-      'Hi there! 👋 I\'m the Gravity Agent. Ask me anything about your data — like "show last month\'s revenue" or "find contact John Doe".',
-    time: formatTime(new Date()),
-  },
-])
-
 function toggleChat() {
-  isOpen.value = !isOpen.value
+  chatStore.toggleChat()
 }
 
 
@@ -164,12 +157,7 @@ async function sendMessage() {
   const text = inputMessage.value.trim()
   if (!text) return
 
-  // Add user message
-  messages.value.push({
-    role: 'user',
-    content: text,
-    time: formatTime(new Date()),
-  })
+  chatStore.addMessage('user', text)
   inputMessage.value = ''
   scrollToBottom()
 
@@ -178,26 +166,20 @@ async function sendMessage() {
   scrollToBottom()
 
   try {
+    // Sliding Window Payload Optimization: Send only the last 6 messages to LLM to save tokens
+    const recentMessages = messages.value.slice(-6).map(m => ({ role: m.role, content: m.content }))
+
     const response = await $fetch('/api/chat', {
       method: 'POST',
       body: {
-        // Send the entire conversation history for context
-        messages: messages.value.map(m => ({ role: m.role, content: m.content }))
+        messages: recentMessages
       }
     })
 
-    messages.value.push({
-      role: 'bot',
-      content: response.reply || 'I am sorry, I did not understand that.',
-      time: formatTime(new Date()),
-    })
+    chatStore.addMessage('bot', response.reply || 'I am sorry, I did not understand that.')
   } catch (error) {
     console.error('Failed to get response:', error)
-    messages.value.push({
-      role: 'bot',
-      content: 'Oops, something went wrong while communicating with the server.',
-      time: formatTime(new Date()),
-    })
+    chatStore.addMessage('bot', 'Oops, something went wrong while communicating with the server.')
   } finally {
     isTyping.value = false
     scrollToBottom()

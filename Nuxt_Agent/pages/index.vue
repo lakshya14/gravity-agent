@@ -128,12 +128,15 @@
 </template>
 
 <script setup>
+import { useChatStore } from '~/stores/chat'
+
 const { data: sessionData } = await useFetch('/api/auth/session')
 
 const isAuthenticated = computed(() => sessionData.value?.isAuthenticated || false)
 
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' })
+  useChatStore().clearChat()
   window.location.reload()
 }
 

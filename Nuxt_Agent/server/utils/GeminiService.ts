@@ -2,6 +2,10 @@ import { GoogleGenAI } from '@google/genai';
 import commonSchema from './common_schema.json';
 import { SalesforceService } from './SalesforceService';
 
+/**
+ * Service responsible for orchestrating the interaction with the Google Gemini LLM.
+ * Handles system prompt generation, tool definitions, validation, and the manual function-calling loop.
+ */
 export class GeminiService {
   private primaryKey: string;
   private fallbackKey?: string;

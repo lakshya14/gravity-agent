@@ -1,3 +1,9 @@
+/**
+ * GET /api/auth/callback
+ * Handles the redirect from Salesforce after successful user authentication.
+ * Exchanges the temporary authorization code for a persistent access token 
+ * and stores it securely in the user's session.
+ */
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const code = query.code as string

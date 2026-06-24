@@ -1,5 +1,10 @@
 import crypto from 'crypto';
 
+/**
+ * GET /api/auth/login
+ * Initiates the Salesforce OAuth 2.0 PKCE (Proof Key for Code Exchange) authorization flow.
+ * Generates a dynamic redirect URL and stores the code verifier in the secure session.
+ */
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   
@@ -18,6 +23,8 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const env = query.env as string
   let loginUrl = config.salesforceLoginUrl as string
+  
+  // Route to sandbox if requested
   if (env === 'sandbox') {
     loginUrl = 'https://test.salesforce.com'
   }
