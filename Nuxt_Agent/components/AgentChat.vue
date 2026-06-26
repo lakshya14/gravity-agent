@@ -121,6 +121,7 @@
 <script setup>
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '~/stores/chat';
+import { performLogout } from '~/utils/auth';
 
 const chatStore = useChatStore();
 const { isOpen, messages } = storeToRefs(chatStore);
@@ -136,6 +137,9 @@ onMounted(async () => {
     isAuthenticated.value = session.isAuthenticated
   } catch (e) {
     console.error('Failed to check session', e)
+    if (e.response?.status === 401 || e.statusCode === 401) {
+      performLogout(true)
+    }
   }
 })
 
@@ -179,6 +183,10 @@ async function sendMessage() {
     chatStore.addMessage('bot', response.reply || 'I am sorry, I did not understand that.')
   } catch (error) {
     console.error('Failed to get response:', error)
+    if (error.response?.status === 401 || error.statusCode === 401) {
+      performLogout(true)
+      return
+    }
     chatStore.addMessage('bot', 'Oops, something went wrong while communicating with the server.')
   } finally {
     isTyping.value = false

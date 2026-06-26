@@ -76,7 +76,20 @@
 </template>
 
 <script setup>
+import { OPPORTUNITY_STAGES } from '~/utils/constants'
+import { performLogout } from '~/utils/auth'
+
 const { data, pending, error, refresh } = await useFetch('/api/salesforce/opportunities')
+
+if (error.value && (error.value.statusCode === 401 || error.value.status === 401)) {
+  performLogout(true)
+}
+
+watch(error, (newErr) => {
+  if (newErr && (newErr.statusCode === 401 || newErr.status === 401)) {
+    performLogout(true)
+  }
+})
 
 const recentOpps = computed(() => data.value?.recent || [])
 const closedOpps = computed(() => data.value?.closed || [])
@@ -100,9 +113,11 @@ async function onModalSaved() {
 
 function getStageClass(stage) {
   const s = (stage || '').toLowerCase()
-  if (s.includes('won')) return 'stage-won'
-  if (s.includes('lost')) return 'stage-lost'
-  if (s.includes('negotiation') || s.includes('review')) return 'stage-warning'
+  
+  if (OPPORTUNITY_STAGES.WON.some(keyword => s.includes(keyword))) return 'stage-won'
+  if (OPPORTUNITY_STAGES.LOST.some(keyword => s.includes(keyword))) return 'stage-lost'
+  if (OPPORTUNITY_STAGES.WARNING.some(keyword => s.includes(keyword))) return 'stage-warning'
+  
   return 'stage-default'
 }
 </script>

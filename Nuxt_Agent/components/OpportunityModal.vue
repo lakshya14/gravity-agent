@@ -68,6 +68,7 @@
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
+import { performLogout } from '~/utils/auth'
 
 const props = defineProps({
   isOpen: {
@@ -127,6 +128,10 @@ async function fetchOpportunityDetails() {
     formData.CloseDate = data.CloseDate ? data.CloseDate.split('T')[0] : ''
   } catch (err) {
     console.error(err)
+    if (err.response?.status === 401 || err.statusCode === 401) {
+      performLogout()
+      return
+    }
     errorMsg.value = err.data?.statusMessage || err.message || 'Failed to load opportunity details.'
   } finally {
     loading.value = false
@@ -154,6 +159,10 @@ async function save() {
     close()
   } catch (err) {
     console.error(err)
+    if (err.response?.status === 401 || err.statusCode === 401) {
+      performLogout()
+      return
+    }
     // Here we catch the specific Salesforce validation errors that our backend returned
     errorMsg.value = err.data?.statusMessage || err.message || 'Failed to save changes.'
   } finally {

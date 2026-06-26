@@ -1,5 +1,11 @@
 <template>
   <div class="landing-page">
+    <!-- Session Expired Alert -->
+    <div v-if="showSessionExpiredAlert" class="alert-banner animate-fade-in-down">
+      <span>⚠️ Your session has expired due to inactivity. Please log in again.</span>
+      <button @click="showSessionExpiredAlert = false" class="alert-close">&times;</button>
+    </div>
+
     <!-- Ambient background effects -->
     <div class="ambient-bg">
       <div class="orb orb-1"></div>
@@ -130,14 +136,27 @@
 <script setup>
 import { useChatStore } from '~/stores/chat'
 
+const route = useRoute()
+const router = useRouter()
+const showSessionExpiredAlert = ref(false)
+
+onMounted(() => {
+  if (route.query.expired === 'true') {
+    showSessionExpiredAlert.value = true
+    const newQuery = { ...route.query }
+    delete newQuery.expired
+    router.replace({ query: newQuery })
+  }
+})
+
 const { data: sessionData } = await useFetch('/api/auth/session')
 
 const isAuthenticated = computed(() => sessionData.value?.isAuthenticated || false)
 
+import { performLogout } from '~/utils/auth'
+
 async function logout() {
-  await $fetch('/api/auth/logout', { method: 'POST' })
-  useChatStore().clearChat()
-  window.location.reload()
+  await performLogout()
 }
 
 const features = [
@@ -173,6 +192,55 @@ const features = [
 .landing-page {
   position: relative;
   min-height: 100vh;
+}
+
+/* --- Alert Banner --- */
+.alert-banner {
+  position: fixed;
+  top: var(--space-2xl);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  padding: var(--space-md) var(--space-xl);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.alert-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.alert-close:hover {
+  opacity: 1;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.4s ease-out forwards;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .ambient-bg {
