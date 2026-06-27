@@ -19,13 +19,7 @@ export default defineEventHandler(async (event) => {
   try {
     const records = await sfService.runSoqlQuery(query);
 
-    if (records.error) {
-      const is401 = records.details && records.details.includes('401');
-      throw createError({ 
-        statusCode: is401 ? 401 : 500, 
-        statusMessage: is401 ? 'Session expired. Please login again.' : `${records.error}: ${records.details}` 
-      });
-    }
+    handleSalesforceError(records);
 
     if (!records || records.length === 0) {
       throw createError({ statusCode: 404, statusMessage: 'Opportunity not found.' });

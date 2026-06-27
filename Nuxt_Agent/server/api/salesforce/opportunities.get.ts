@@ -19,19 +19,8 @@ export default defineEventHandler(async (event) => {
       sfService.runSoqlQuery(closedOppsQuery)
     ]);
 
-    // Handle case where query failed and returned error object from the service
-    const checkError = (records: any) => {
-      if (records.error) {
-        const is401 = records.details && records.details.includes('401');
-        throw createError({ 
-          statusCode: is401 ? 401 : 500, 
-          statusMessage: is401 ? 'Session expired. Please login again.' : `${records.error}: ${records.details}` 
-        });
-      }
-    };
-    
-    checkError(recentRecords);
-    checkError(closedRecords);
+    handleSalesforceError(recentRecords);
+    handleSalesforceError(closedRecords);
 
     return {
       recent: recentRecords,
