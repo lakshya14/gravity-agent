@@ -23,10 +23,10 @@ export default defineEventHandler(async (event) => {
 
   try {
     // Instantiate our new services
-    const sfService = new SalesforceService(accessToken, instanceUrl);
     const geminiService = new GeminiService(
       config.geminiApiKey as string, 
-      sfService, 
+      accessToken,
+      instanceUrl,
       config.geminiApiKey2 as string
     );
 

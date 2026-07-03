@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+mcp
+simple-salesforce
+requests
+pydantic>=2.8.0

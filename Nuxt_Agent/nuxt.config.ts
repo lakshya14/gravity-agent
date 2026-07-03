@@ -2,7 +2,7 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
-  modules: ['@pinia/nuxt', '@pinia-plugin-persistedstate/nuxt'],
+  modules: ['@pinia/nuxt', '@pinia-plugin-persistedstate/nuxt', '@nuxt/eslint'],
 
   runtimeConfig: {
     appBaseUrl: process.env.APP_BASE_URL,
@@ -11,7 +11,7 @@ export default defineNuxtConfig({
     salesforceClientId: process.env.SALESFORCE_CLIENT_ID,
     salesforceClientSecret: process.env.SALESFORCE_CLIENT_SECRET,
     salesforceLoginUrl: process.env.SALESFORCE_LOGIN_URL || 'https://login.salesforce.com',
-    sessionPassword: process.env.NUXT_SESSION_PASSWORD || 'default-password-for-dev-must-be-at-least-32-chars-long',
+    sessionPassword: process.env.NUXT_SESSION_PASSWORD,
   },
 
   css: ['~/assets/css/main.css'],

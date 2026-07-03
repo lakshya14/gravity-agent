@@ -27,7 +27,7 @@ export const useChatStore = defineStore('chat', {
       this.messages = [
         {
           role: 'bot',
-          content: 'Chat cleared. How can I help you today?',
+          content: 'Hi! I\\'m your Gravity Agent. How can I help you today?',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }
       ];
