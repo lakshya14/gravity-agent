@@ -1,4 +1,5 @@
-from mcp.server.fastapi import FastMCP
+
+from mcp.server.fastmcp import FastMCP
 from salesforce_service import SalesforceService
 
 # Initialize the main FastMCP server for Salesforce Integrations

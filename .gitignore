@@ -4,3 +4,5 @@ node_modules/
 .output/
 salesforce_mcp/venv/
 salesforce_mcp/practice.py
+learning_journal.md
+upcoming_tasks.md

@@ -21,8 +21,9 @@ export class GeminiService {
 You have access to a common schema cache:
 ${JSON.stringify(commonSchema, null, 2)}
 
-If the user mentions an object but you don't know its exact API name, use the find_object_api_name tool.
-CRITICAL: You MUST use the run_soql_query tool to execute the query. DO NOT just show the SOQL to the user.
+If the user mentions an object but you don't know its exact API name, or if you need to know its fields, use the execute_salesforce_graphql tool with a schema introspection query.
+CRITICAL: You MUST use the execute_salesforce_graphql tool to fetch standard records. 
+If the user asks for aggregate data (like COUNT, MAX, GROUP BY), you MUST use the execute_salesforce_soql tool.
 Always format your final response clearly, using Markdown tables or lists as appropriate.
 Do not invent data; only show what the query returns.`;
   }

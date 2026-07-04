@@ -41,29 +41,6 @@ class SalesforceService:
         except requests.exceptions.RequestException as error:
             return self._handle_api_error("execute query", error, locals().get('response'))
 
-    def get_object_metadata(self, object_name: str) -> Dict[str, Any]:
-        """Fetches metadata (fields) for a specific Salesforce object."""
-        print(f"Fetching metadata for: {object_name}")
-        url = f"{self._get_base_url()}/sobjects/{object_name}/describe"
-        
-        try:
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            
-            data = response.json()
-            fields = [
-                {"name": f["name"], "type": f["type"], "label": f["label"]} 
-                for f in data.get("fields", [])
-            ]
-            
-            return {
-                "name": data.get("name"),
-                "fields": fields
-            }
-            
-        except requests.exceptions.RequestException as error:
-            return self._handle_api_error(f"describe object {object_name}", error, locals().get('response'))
-
     def update_record(self, object_name: str, record_id: str, fields: Dict[str, Any]) -> Dict[str, Any]:
         """Updates a specific Salesforce record."""
         print(f"Updating {object_name} {record_id} with: {fields}")
@@ -104,35 +81,6 @@ class SalesforceService:
         except requests.exceptions.RequestException as error:
             return self._handle_api_error("execute GraphQL query", error, locals().get('response'))
 
-
-    def find_object_api_name(self, label: str) -> Dict[str, Any]:
-        """
-        Searches for a Salesforce object's API name by its UI label.
-        Useful when the AI only knows the human-readable name of a custom object.
-        """
-        print(f"Searching API name for label: {label}")
-        url = f"{self._get_base_url()}/sobjects"
-        
-        try:
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            
-            data = response.json()
-            search_term = label.lower()
-            matches = []
-            
-            for obj in data.get("sobjects", []):
-                obj_label = obj.get("label", "").lower() 
-                if search_term in obj_label:
-                    matches.append({"label": obj["label"], "apiName": obj["name"]})
-            
-            if not matches:
-                return {"error": f"No objects found matching label: {label}"}
-                
-            return {"matches": matches}
-            
-        except requests.exceptions.RequestException as error:
-            return self._handle_api_error("search objects", error, locals().get('response'))
 
     def _handle_api_error(self, action: str, error: Exception, response: Optional[requests.Response] = None) -> Dict[str, Any]:
         """
