@@ -147,7 +147,7 @@ async function checkPythonStatus() {
   try {
     const res = await $fetch('/api/python/status')
     if (res.status === 'waking_up' || res.status === 'stopped') {
-      chatStore.addMessage('bot', 'System: Our AI service is currently waking up from sleep mode. Please expect a brief delay (~30 seconds) before your first message is answered.')
+      chatStore.addMessage('bot', 'System: Our service is starting, please wait for 30 secs.')
     }
   } catch (error) {
     console.error('Failed to check python status', error)
