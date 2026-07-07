@@ -1,3 +1,5 @@
+import { consola } from 'consola';
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const session = await useSession(event, { password: config.sessionPassword });
@@ -35,7 +37,10 @@ export default defineEventHandler(async (event) => {
     const text = await geminiService.executeChat(historyMessages, userMessage);
     return { reply: text };
   } catch (error: any) {
-    console.error('API Error:', error);
+    consola.error('[Chat API] Communication failed:', error.message || error);
+    if (error.stack) {
+      consola.error(error.stack);
+    }
     
     // Pass up user-friendly error messages from GeminiService
     if (typeof error === 'string') {
