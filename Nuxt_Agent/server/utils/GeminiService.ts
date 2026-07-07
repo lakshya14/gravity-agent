@@ -31,49 +31,41 @@ Do not invent data; only show what the query returns.`;
   }
 
   async executeChat(historyMessages: any[], userMessage: string): Promise<string> {
-    const getStatus = (e: any) => e?.status || e?.code || e?.error?.code || e?.error?.status;
-    const getMessage = (e: any) => (e?.message || e?.error?.message || '').toLowerCase();
+    const keys = [this.primaryKey, this.fallbackKey].filter(Boolean) as string[];
 
-    const isQuotaExceeded = (e: any) => {
-      const status = getStatus(e);
-      return status === 429 || status === '429' || status === 'RESOURCE_EXHAUSTED';
-    };
+    for (const [index, key] of keys.entries()) {
+      try {
+        return await this.runChat(key, historyMessages, userMessage);
+      } catch (error: any) {
+        const isLast = index === keys.length - 1;
 
-    const isRetryable = (e: any) => {
-      if (!e) return false;
-      if (isQuotaExceeded(e)) return true;
-      
-      const status = getStatus(e);
-      if (typeof status === 'number' && status >= 500) return true;
-      if (typeof status === 'string' && (status.startsWith('5') || status === 'UNAVAILABLE')) return true;
-      
-      const msg = getMessage(e);
-      return ['timeout', 'network', 'unreachable', 'fetch failed', 'econnreset', 'enotfound', 'econnrefused', 'high demand'].some(keyword => msg.includes(keyword));
-    };
-
-    try {
-      return await this.runChat(this.primaryKey, historyMessages, userMessage);
-    } catch (error: any) {
-      if (isRetryable(error) && this.fallbackKey) {
-        console.log(`Primary API key failed. Falling back to secondary key...`);
-        try {
-          return await this.runChat(this.fallbackKey, historyMessages, userMessage);
-        } catch (fallbackError: any) {
-          if (isQuotaExceeded(fallbackError)) {
-            return "⚠️ **High Traffic:** We are currently experiencing an unusually high volume of requests. Please try again in a few moments.";
-          } else if (isRetryable(fallbackError)) {
-            return "⚠️ **Service Unavailable:** The assistant is currently unreachable. Please try again later.";
-          }
-          throw fallbackError;
+        if (!isLast && this.isRetryable(error)) {
+          console.log('Primary API key failed. Falling back to secondary key...');
+          continue;
         }
+
+        if (this.isRetryable(error)) {
+          return "⚠️ **Service Unavailable:** The assistant is currently unreachable. Please try again later.";
+        }
+
+        throw error;
       }
-      if (isQuotaExceeded(error)) {
-        return "⚠️ **High Traffic:** We are currently experiencing an unusually high volume of requests. Please try again in a few moments.";
-      } else if (isRetryable(error)) {
-        return "⚠️ **Service Unavailable:** The assistant is currently unreachable. Please try again later.";
-      }
-      throw error;
     }
+
+    throw new Error('No API keys configured');
+  }
+
+  private isRetryable(error: any): boolean {
+    if (!error) return false;
+
+    const status = error?.status || error?.code || error?.error?.code || error?.error?.status;
+    if (status === 429 || status === '429' || status === 'RESOURCE_EXHAUSTED') return true;
+    if (typeof status === 'number' && status >= 500) return true;
+    if (typeof status === 'string' && (status.startsWith('5') || status === 'UNAVAILABLE')) return true;
+
+    const message = (error?.message || error?.error?.message || '').toLowerCase();
+    return ['timeout', 'network', 'unreachable', 'fetch failed', 'econnreset', 'enotfound', 'econnrefused', 'high demand']
+      .some(keyword => message.includes(keyword));
   }
 
   private async runChat(apiKey: string, historyMessages: any[], userMessage: string): Promise<string> {
@@ -90,57 +82,59 @@ Do not invent data; only show what the query returns.`;
     
     await mcpClient.connect(transport);
     
-    // 2. Fetch Tools Dynamically from Python Server
-    const toolList = await mcpClient.listTools();
-    const geminiTools = [{
-      functionDeclarations: toolList.tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema
-      }))
-    }];
+    try {
+      // 2. Fetch Tools Dynamically from Python Server
+      const toolList = await mcpClient.listTools();
+      const geminiTools = [{
+        functionDeclarations: toolList.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema
+        }))
+      }];
 
-    // 3. Initialize Gemini
-    const aiInstance = new GoogleGenAI({ apiKey });
-    const chat = aiInstance.chats.create({
-      model: 'gemini-2.5-flash',
-      history: historyMessages,
-      config: {
-        systemInstruction: this.getSystemInstruction(),
-        temperature: 0.2,
-        tools: geminiTools
+      // 3. Initialize Gemini
+      const aiInstance = new GoogleGenAI({ apiKey });
+      const chat = aiInstance.chats.create({
+        model: 'gemini-2.5-flash',
+        history: historyMessages,
+        config: {
+          systemInstruction: this.getSystemInstruction(),
+          temperature: 0.2,
+          tools: geminiTools
+        }
+      });
+
+      let response = await chat.sendMessage({ message: userMessage });
+      let iterations = 0;
+
+      // 4. Dynamic Execution Loop
+      while (response.functionCalls && response.functionCalls.length > 0 && iterations < 3) {
+        iterations++;
+        const functionCall = response.functionCalls[0];
+        
+        // Instead of an if/else block, we blindly forward the request to the MCP server!
+        const result = await mcpClient.callTool({
+          name: functionCall.name,
+          arguments: functionCall.args as any
+        });
+
+        // Gemini expects the response inside an object
+        const formattedResult = { data: result.content };
+
+        response = await chat.sendMessage({
+          message: [{
+            functionResponse: {
+              name: functionCall.name,
+              response: formattedResult
+            }
+          }]
+        });
       }
-    });
 
-    let response = await chat.sendMessage({ message: userMessage });
-    let iterations = 0;
-
-    // 4. Dynamic Execution Loop
-    while (response.functionCalls && response.functionCalls.length > 0 && iterations < 3) {
-      iterations++;
-      const functionCall = response.functionCalls[0];
-      
-      // Instead of an if/else block, we blindly forward the request to the MCP server!
-      const result = await mcpClient.callTool({
-        name: functionCall.name,
-        arguments: functionCall.args as any
-      });
-
-      // Gemini expects the response inside an object
-      const formattedResult = { data: result.content };
-
-      response = await chat.sendMessage({
-        message: [{
-          functionResponse: {
-            name: functionCall.name,
-            response: formattedResult
-          }
-        }]
-      });
+      return response.text;
+    } finally {
+      await transport.close();
     }
-
-    // Always clean up the connection when done
-    await transport.close();
-    return response.text;
   }
 }
