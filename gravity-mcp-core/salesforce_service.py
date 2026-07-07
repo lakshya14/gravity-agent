@@ -82,6 +82,41 @@ class SalesforceService:
             return self._handle_api_error("execute GraphQL query", error, locals().get('response'))
 
 
+    def find_object_api_name(self, label: str) -> Dict[str, Any]:
+        """
+        Searches the Salesforce Global Describe for an object with a matching label
+        and returns its API name.
+        """
+        print(f"Searching for object API name by label: {label}")
+        url = f"{self._get_base_url()}/sobjects/"
+        
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            sobjects = data.get("sobjects", [])
+            
+            # Case-insensitive search
+            search_label = label.lower()
+            
+            for obj in sobjects:
+                if obj.get("label", "").lower() == search_label or obj.get("labelPlural", "").lower() == search_label:
+                    return {
+                        "success": True,
+                        "label": obj.get("label"),
+                        "apiName": obj.get("name"),
+                        "custom": obj.get("custom")
+                    }
+                    
+            return {
+                "success": False,
+                "error": f"Could not find an object with label '{label}'"
+            }
+            
+        except requests.exceptions.RequestException as error:
+            return self._handle_api_error(f"search object label '{label}'", error, locals().get('response'))
+
     def _handle_api_error(self, action: str, error: Exception, response: Optional[requests.Response] = None) -> Dict[str, Any]:
         """
         Centralized error handling for API requests.

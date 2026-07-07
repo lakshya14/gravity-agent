@@ -7,10 +7,10 @@ This document provides a high-level overview of the architectural decisions, int
 - **AI Integration**: Google Gemini SDK (`@google/genai`)
 - **Agent Tooling**: FastMCP (Python) server for Model Context Protocol
 - **CRM System**: Salesforce
-- **Deployment**: Vercel
+- **Deployment**: Render
 
 ## 2. Architecture & Integration
-- **Integration Pattern**: Backend-for-Frontend (BFF) pattern using Nuxt Server Routes, combined with an MCP Server for dynamic Agent Tooling.
+- **Integration Pattern**: Backend-for-Frontend (BFF) pattern using Nuxt Server Routes, combined with an MCP Server (using Streamable JSON-RPC) for dynamic Agent Tooling.
 - **Authentication Flow**: Salesforce OAuth 2.0 via Connected App. The access token is passed from Nuxt context to the Python MCP server.
 - **Data Fetching Strategy**: Agentic GraphQL for dynamic exploration, SOQL for aggregate data, and lazy fetching for UI-driven lists.
 

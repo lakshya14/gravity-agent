@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       config.geminiApiKey as string, 
       accessToken,
       instanceUrl,
+      config.mcpServerUrl as string,
       config.geminiApiKey2 as string
     );
 

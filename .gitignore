@@ -2,7 +2,8 @@ node_modules/
 .env
 .nuxt/
 .output/
-salesforce_mcp/venv/
-salesforce_mcp/practice.py
+gravity-mcp-core/venv/
+gravity-mcp-core/practice.py
 learning_journal.md
 upcoming_tasks.md
+sfLwc/

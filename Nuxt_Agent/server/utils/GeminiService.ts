@@ -8,11 +8,13 @@ export class GeminiService {
   private fallbackKey?: string;
   private accessToken: string;
   private instanceUrl: string;
+  private mcpServerUrl: string;
 
-  constructor(primaryKey: string, accessToken: string, instanceUrl: string, fallbackKey?: string) {
+  constructor(primaryKey: string, accessToken: string, instanceUrl: string, mcpServerUrl: string, fallbackKey?: string) {
     this.primaryKey = primaryKey;
     this.accessToken = accessToken;
     this.instanceUrl = instanceUrl;
+    this.mcpServerUrl = mcpServerUrl;
     this.fallbackKey = fallbackKey;
   }
 
@@ -79,7 +81,7 @@ Do not invent data; only show what the query returns.`;
     
     // 1. Establish the MCP Connection
     // We pass the auth tokens as query parameters to the Python server's SSE endpoint
-    const mcpUrl = new URL('http://127.0.0.1:8000/sse');
+    const mcpUrl = new URL(this.mcpServerUrl);
     mcpUrl.searchParams.append('access_token', this.accessToken);
     mcpUrl.searchParams.append('instance_url', this.instanceUrl);
 
