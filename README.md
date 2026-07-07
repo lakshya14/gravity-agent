@@ -1,57 +1,69 @@
 # Gravity Agent
 
-Gravity is an intelligent search and AI assistant project. It integrates a modern web interface built with Nuxt with the power of Google Gemini AI and Salesforce data. 
+Gravity is an intelligent search and AI assistant project. It integrates a modern web interface built with Nuxt, the reasoning power of Google Gemini AI, and dynamic Salesforce integration using a Backend-for-Frontend (BFF) and Model Context Protocol (MCP) architecture.
 
-**Live Project:** [View Live on Vercel](https://gravity-agent.vercel.app) *(Note: update this link with your exact Vercel URL)*
+**Live Project:** [View Live on Render](https://gravity-agent-v3.onrender.com)
 
 ## Tech Stack
 
-*   **Frontend & API:** Nuxt (Vue 3, Nitro Server Engine)
-*   **AI:** Google Gemini SDK (`@google/genai`)
-*   **CRM Integration:** Salesforce REST APIs
-*   **Deployment:** Vercel (Serverless Edge)
+- **Frontend & API**: Nuxt 4 (Vue 3, Nitro Server Engine)
+- **AI Integration**: Google Gemini SDK (`@google/genai`)
+- **Agent Tooling**: FastMCP (Python) server
+- **CRM System**: Salesforce (OAuth 2.0 Connected App)
+- **Deployment**: Render
 
 ## Project Structure
 
-*   `/Nuxt_Agent`: Contains the Nuxt 4 application.
-    *   `/server/api/chat.post.ts`: Handles communication with Google Gemini.
-    *   `/server/api/salesforce/...`: Endpoints for fetching Salesforce data.
-    *   `/components`: Reusable Vue components (e.g., AgentChat, OpportunitiesDashboard).
+- `/Nuxt_Agent`: The Nuxt 4 web application and BFF (Backend-for-Frontend). Handles Salesforce OAuth, UI, and LLM orchestration.
+- `/gravity-mcp-core`: Python FastMCP server. Provides dynamic Agentic GraphQL and SOQL tools to the LLM.
 
 ## Local Development Setup
 
 ### 1. Prerequisites
-*   Node.js (v22 or higher recommended)
-*   A Google Gemini API Key
-*   Salesforce Developer Org credentials
+- Node.js (v22+)
+- Python (3.10+)
+- Google Gemini API Key
+- Salesforce Developer Org with a configured Connected App (OAuth)
 
-### 2. Installation
-Clone the repository and install the dependencies for the Nuxt application:
+### 2. Environment Variables
+Create a `.env` file inside the `Nuxt_Agent` directory:
 
+```env
+# AI Keys
+GEMINI_API_KEY=your_primary_gemini_key
+GEMINI_API_KEY2=your_fallback_gemini_key # Optional
+
+# Salesforce Connected App
+SALESFORCE_CLIENT_ID=your_client_id
+SALESFORCE_CLIENT_SECRET=your_client_secret
+SALESFORCE_LOGIN_URL=https://login.salesforce.com
+
+# Nuxt & MCP Setup
+NUXT_SESSION_PASSWORD=a_secure_random_password_at_least_32_chars_long
+APP_BASE_URL=http://localhost:3000
+MCP_SERVER_URL=http://127.0.0.1:8000/sse/
+```
+
+### 3. Running the Python MCP Server
+Open a terminal and start the backend:
+```bash
+cd gravity-mcp-core
+pip install -r requirements.txt # (or use your virtual environment)
+python server.py
+```
+*Runs on `http://127.0.0.1:8000`*
+
+### 4. Running the Nuxt Application
+Open a second terminal and start the frontend:
 ```bash
 cd Nuxt_Agent
 npm install
-```
-
-### 3. Environment Variables
-Create a `.env` file inside the `Nuxt_Agent` directory. **Never commit this file to version control.**
-
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-# Add your Salesforce integration keys here as needed
-```
-
-### 4. Start the Development Server
-Run the local Nuxt development server:
-
-```bash
 npm run dev
 ```
-The application will be available at `http://localhost:3000`.
+*Available at `http://localhost:3000`*
 
 ## Deployment
 
-This project is configured to be seamlessly deployed on [Vercel](https://vercel.com).
-*   Connect the repository to Vercel.
-*   Set the **Root Directory** to `Nuxt_Agent`.
-*   Ensure all keys from your `.env` file are added to the Vercel Environment Variables settings.
+This project is deployed on [Render](https://render.com) as two separate Web Services:
+1. The **Python MCP Backend** (requires `PORT` environment variable).
+2. The **Nuxt Frontend** (requires all the environment variables listed above, with `MCP_SERVER_URL` pointing to your deployed Python backend URL).

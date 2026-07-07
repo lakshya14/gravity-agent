@@ -40,7 +40,8 @@ Do not invent data; only show what the query returns.`;
         const isLast = index === keys.length - 1;
 
         if (!isLast && this.isRetryable(error)) {
-          console.log('Primary API key failed. Falling back to secondary key...');
+          console.log(`Attempt with key ${index + 1} failed with error:`, error?.message || error);
+          console.log('Falling back to secondary key...');
           continue;
         }
 

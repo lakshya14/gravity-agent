@@ -27,28 +27,6 @@ export class SalesforceService {
     }
   }
 
-  /**
-   * Fetches metadata (fields) for a specific Salesforce object.
-   * @param objectName The API name of the object.
-   * @returns Object containing name and fields.
-   */
-  async getObjectMetadata(objectName: string): Promise<any> {
-    console.log(`Fetching metadata for: ${objectName}`);
-    const describeUrl = `${this.instanceUrl}/services/data/v60.0/sobjects/${objectName}/describe`;
-    try {
-      const res = await $fetch<any>(describeUrl, {
-        headers: { Authorization: `Bearer ${this.accessToken}` }
-      });
-      return {
-        name: res.name,
-        fields: res.fields.map((f: any) => ({ name: f.name, type: f.type, label: f.label }))
-      };
-    } catch (err: any) {
-      console.error('Describe Error:', err.data || err.message);
-      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
-      return { error: `Failed to describe object ${objectName}`, details };
-    }
-  }
 
   /**
    * Updates a specific Salesforce record.
@@ -74,30 +52,5 @@ export class SalesforceService {
     }
   }
 
-  /**
-   * Searches for a Salesforce object's API name by its label.
-   * @param label The label to search for.
-   * @returns List of matching API names.
-   */
-  async findObjectApiName(label: string): Promise<any> {
-    console.log(`Searching API name for label: ${label}`);
-    const sobjectsUrl = `${this.instanceUrl}/services/data/v60.0/sobjects`;
-    try {
-      const res = await $fetch<any>(sobjectsUrl, {
-        headers: { Authorization: `Bearer ${this.accessToken}` }
-      });
-      const matches = res.sobjects
-        .filter((obj: any) => obj.label.toLowerCase().includes(label.toLowerCase()))
-        .map((obj: any) => ({ label: obj.label, apiName: obj.name }));
-      
-      if (matches.length === 0) {
-        return { error: `No objects found matching label: ${label}` };
-      }
-      return { matches };
-    } catch (err: any) {
-      console.error('Find Object Error:', err.data || err.message);
-      const details = err.data ? JSON.stringify(err.data) : err.message || err.toString();
-      return { error: `Failed to search objects`, details };
-    }
-  }
+
 }
