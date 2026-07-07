@@ -59,6 +59,10 @@ async def find_object_api_name(label: str) -> dict:
 app = FastAPI(title="Gravity MCP Core")
 sse = SseServerTransport("/message")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 async def sse_app(scope, receive, send):
     scope_dict = dict(scope)
     scope_dict["root_path"] = ""

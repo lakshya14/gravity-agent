@@ -143,8 +143,22 @@ onMounted(async () => {
   }
 })
 
+async function checkPythonStatus() {
+  try {
+    const res = await $fetch('/api/python/status')
+    if (res.status === 'waking_up' || res.status === 'stopped') {
+      chatStore.addMessage('bot', 'System: Our AI service is currently waking up from sleep mode. Please expect a brief delay (~30 seconds) before your first message is answered.')
+    }
+  } catch (error) {
+    console.error('Failed to check python status', error)
+  }
+}
+
 function toggleChat() {
   chatStore.toggleChat()
+  if (isOpen.value) {
+    checkPythonStatus()
+  }
 }
 
 

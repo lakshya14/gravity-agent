@@ -46,12 +46,12 @@
 
         <!-- Search Bar -->
         <div class="search-wrapper animate-fade-in-up delay-300 login-buttons">
-          <a href="/api/auth/login?env=production" class="search-btn login-btn">
+          <button @click="connectToSalesforce('production')" class="search-btn login-btn">
             Connect to Production
-          </a>
-          <a href="/api/auth/login?env=sandbox" class="search-btn login-btn sandbox-btn">
+          </button>
+          <button @click="connectToSalesforce('sandbox')" class="search-btn login-btn sandbox-btn">
             Connect to Sandbox
-          </a>
+          </button>
         </div>
       </div>
     </section>
@@ -157,6 +157,14 @@ import { performLogout } from '~/utils/auth'
 
 async function logout() {
   await performLogout()
+}
+
+function connectToSalesforce(env) {
+  // Fire and forget: ping the status endpoint to trigger a cold start on Render
+  $fetch('/api/python/status').catch(e => console.error('Failed to ping python server:', e))
+  
+  // Proceed with authentication
+  window.location.href = `/api/auth/login?env=${env}`
 }
 
 const features = [
