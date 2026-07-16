@@ -17,6 +17,19 @@
             </div>
           </div>
           <div class="chat-header-actions">
+            <button
+              id="agent-chat-clear"
+              class="chat-clear-btn"
+              @click="clearChat"
+              aria-label="Clear chat history"
+              title="Clear chat"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+              </svg>
+            </button>
             <a
               v-if="!isAuthenticated"
               href="/api/auth/login"
@@ -159,6 +172,10 @@ function toggleChat() {
   if (isOpen.value) {
     checkPythonStatus()
   }
+}
+
+function clearChat() {
+  chatStore.clearChat()
 }
 
 
@@ -380,6 +397,22 @@ async function sendMessage() {
 
 .auth-success {
   color: #34d399 !important;
+}
+
+.chat-clear-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  transition: all var(--transition-fast);
+}
+
+.chat-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
 }
 
 .chat-close-btn {

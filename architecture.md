@@ -1,24 +1,98 @@
-# Gravity Agent Architecture Overview
+# Gravity Agent — Architecture Overview
 
 This document provides a high-level overview of the architectural decisions, integration patterns, and authentication flows used in the Gravity Agent project.
 
+Gravity is fundamentally an **integration architecture**: it acts as a translation and orchestration layer between a modern web UI, a Google Gemini AI agent, and the Salesforce CRM platform. The BFF and MCP server are the two pivotal integration points.
+
 ## 1. Tech Stack Overview
-- **Frontend & API**: Nuxt 4 (Vue 3, TypeScript, Nitro Server Engine)
-- **AI Integration**: Google Gemini SDK (`@google/genai`)
-- **Agent Tooling**: FastMCP (Python) server for Model Context Protocol
-- **CRM System**: Salesforce
-- **Deployment**: Render
+
+| Layer | Technology | Role |
+|---|---|---|
+| Frontend & BFF | Nuxt 4 (Vue 3, TypeScript, Nitro) | UI rendering, OAuth handling, LLM orchestration |
+| AI Integration | Google Gemini SDK (`@google/genai`) | Reasoning, tool-calling, response generation |
+| Agent Tooling | FastMCP (Python, JSON-RPC/SSE) | Exposes Salesforce and Graph DB tools to the LLM via MCP |
+| Graph Database | Neo4j AuraDB (Cypher) | Relationship traversal, multi-hop reasoning over Salesforce entities |
+| CRM System | Salesforce | Source of truth for all business data |
+| Deployment | Render | Hosts both Nuxt and Python services as separate web services |
 
 ## 2. Architecture & Integration
-- **Integration Pattern**: Backend-for-Frontend (BFF) pattern using Nuxt Server Routes, combined with an MCP Server (using Streamable JSON-RPC) for dynamic Agent Tooling.
-- **Authentication Flow**: Salesforce OAuth 2.0 via Connected App. The access token is passed from Nuxt context to the Python MCP server.
-- **Data Fetching Strategy**: Agentic GraphQL for dynamic exploration, SOQL for aggregate data, and lazy fetching for UI-driven lists.
+
+### 2.1 Data Flow Diagram
+
+```mermaid
+flowchart TD
+    User(["👤 User (Browser)"])
+
+    subgraph Nuxt_BFF ["Nuxt 4 — Backend-for-Frontend"]
+        UI["Vue 3 UI"]
+        BFF["Nuxt Server Routes (BFF)"]
+        LLM["LLM Orchestrator\n(@google/genai)"]
+    end
+
+    subgraph MCP ["gravity-mcp-core (Python FastMCP)"]
+        MCP_Server["MCP Server (SSE/JSON-RPC)"]
+        GraphQL["Agentic GraphQL Tool"]
+        SOQL["SOQL Tools"]
+        GraphDB_Tool["Graph DB Tool (Cypher)"]
+    end
+
+    Neo4j[("🔷 Neo4j AuraDB")]
+    SF[("☁️ Salesforce CRM")]
+
+    User -->|"HTTP / WebSocket"| UI
+    UI -->|"API calls"| BFF
+    BFF -->|"OAuth token + prompt"| LLM
+    LLM -->|"MCP tool calls (JSON-RPC)"| MCP_Server
+    MCP_Server --> GraphQL & SOQL & GraphDB_Tool
+    GraphQL & SOQL -->|"Authenticated API calls\n(OAuth token passed from Nuxt)"| SF
+    GraphDB_Tool -->|"Cypher queries"| Neo4j
+    BFF -->|"Hardcoded SOQL / REST\n(deterministic UI routes)"| SF
+```
+
+### 2.2 Responsibility Boundaries
+
+| Concern | Owner | Why |
+|---|---|---|
+| UI rendering & routing | Nuxt / Vue 3 | Server-side rendering, type safety |
+| Salesforce OAuth handshake | Nuxt BFF | Keeps secrets server-side; avoids CORS |
+| LLM orchestration & tool dispatch | Nuxt BFF (LLM Orchestrator) | Single place to manage model, system prompt, chat history |
+| Dynamic / exploratory data access | FastMCP (Python) | Agentic GraphQL + SOQL; AI decides what to query |
+| Relationship & multi-hop reasoning | FastMCP → Neo4j AuraDB | Graph traversal over Salesforce entity relationships (Accounts ↔ Opportunities) |
+| Deterministic UI data access | Nuxt BFF (hardcoded routes) | Predictable latency; no LLM involved |
+| Salesforce schema discovery | FastMCP `find_object_api_name` (SOQL-based) | Avoids heavy schema introspection; purpose-built |
+
+### 2.3 Authentication Flow
+
+1. User hits `/auth/login` → Nuxt BFF redirects to Salesforce OAuth 2.0 login.
+2. Salesforce returns an `access_token` to the BFF callback route.
+3. The token is stored in the Nuxt server session (encrypted).
+4. On every agentic request, the BFF passes the token to the Python MCP server via request headers, so Salesforce enforces that user's Field-Level Security (FLS) natively.
+
+### 2.4 Data Fetching Strategy
+
+| Mode | Mechanism | Used For |
+|---|---|---|
+| Agentic GraphQL | LLM → MCP → Salesforce GraphQL API | Dynamic, AI-driven exploration |
+| SOQL (via MCP) | LLM → MCP → Salesforce SOQL | Aggregate queries, structured searches, schema discovery |
+| Graph DB (Cypher) | LLM → MCP → Neo4j AuraDB | Relationship traversal, multi-hop reasoning (e.g., "which accounts have the most opportunities?") |
+| Hardcoded BFF Routes | Nuxt Server Route → Salesforce REST | Fixed UI dashboards, forms |
 
 ## 3. Tradeoffs Accepted
+
 | Decision | Alternative Considered | Why We Accepted This |
-|----------|------------------------|----------------------|
+|---|---|---|
 | **Salesforce User OAuth (Impersonation)** | Service Account / Integration User | We chose OAuth so that Salesforce automatically enforces Field-Level Security (FLS) for each user. We traded the simplicity of a Service Account for robust, native Salesforce security. |
 | **Agentic GraphQL via MCP** | Hardcoded REST Endpoints for all data access | We accepted the risk of malformed AI queries (hallucinations) to gain extreme flexibility. The agent can explore custom Salesforce instances dynamically without requiring new backend endpoints. |
 | **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | We retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power specific, deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
 | **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | We retained the custom `find_object_api_name` MCP tool in Python because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
+| **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | We accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
 | **BFF Pattern** | Direct frontend-to-Salesforce API calls | We traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
+| **Two separate services (Nuxt + Python)** | Monorepo with a single Node process | Keeps language runtimes isolated; each service can be scaled, deployed, and restarted independently on Render. |
+
+## 4. Non-Functional Characteristics
+
+| Characteristic | Current Approach | Known Limitation |
+|---|---|---|
+| **Latency** | Hardcoded routes are fast (<200ms). Agentic paths add LLM round-trip overhead (1–5s typical). | Agentic responses are not suitable for real-time UI interactions. |
+| **Scalability** | Stateless Nuxt BFF; Python MCP is stateless per-request. | Salesforce API governor limits apply; no request queuing implemented. |
+| **Reliability** | Gemini API key fallback (`GEMINI_API_KEY2`). | No retry logic on MCP tool failures; single-region deployment. |

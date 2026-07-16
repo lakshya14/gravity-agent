@@ -1,6 +1,9 @@
+import logging
 import requests
 from typing import Dict, Any, Optional
 from urllib.parse import quote
+
+logger = logging.getLogger("gravity_mcp.salesforce")
 
 class SalesforceService:
     """
@@ -26,7 +29,7 @@ class SalesforceService:
 
     def run_soql_query(self, query: str) -> Dict[str, Any]:
         """Executes a SOQL query against Salesforce."""
-        print(f"Running SOQL: {query}")
+        logger.info("Running SOQL: %s", query)
         
         encoded_query = quote(query)
         url = f"{self._get_base_url()}/query/?q={encoded_query}"
@@ -43,7 +46,7 @@ class SalesforceService:
 
     def update_record(self, object_name: str, record_id: str, fields: Dict[str, Any]) -> Dict[str, Any]:
         """Updates a specific Salesforce record."""
-        print(f"Updating {object_name} {record_id} with: {fields}")
+        logger.info("Updating %s %s with: %s", object_name, record_id, fields)
         url = f"{self._get_base_url()}/sobjects/{object_name}/{record_id}"
         
         try:
@@ -65,7 +68,7 @@ class SalesforceService:
         Returns:
             Dict: The JSON response containing the query results.
         """
-        print(f"Running GraphQL query:\n{query}")
+        logger.info("Running GraphQL query:\n%s", query)
         url = f"{self._get_base_url()}/graphql"
         
         payload = {
@@ -87,7 +90,7 @@ class SalesforceService:
         Searches the Salesforce Global Describe for an object with a matching label
         and returns its API name.
         """
-        print(f"Searching for object API name by label: {label}")
+        logger.info("Searching for object API name by label: %s", label)
         url = f"{self._get_base_url()}/sobjects/"
         
         try:
@@ -121,7 +124,7 @@ class SalesforceService:
         """
         Centralized error handling for API requests.
         """
-        print(f"API Error during {action}: {error}")
+        logger.error("API Error during %s: %s", action, error)
         
         details = str(error)
         if response is not None:
