@@ -2,7 +2,7 @@
 
 Gravity is an **integration architecture** that connects a modern AI agent to Salesforce CRM and a Neo4j Graph Database. It bridges a Nuxt 4 web interface, Google Gemini AI, and a Python MCP server into a single cohesive platform where users can interact with their Salesforce data — including relationship-aware graph queries — through natural language.
 
-**Live Project:** [View Live on Render](https://gravity-agent-v3.onrender.com)
+**Live Project:** [View Live on Render](https://gravity-agent-v4.onrender.com)
 
 ### How it fits together
 
@@ -89,5 +89,5 @@ npm run dev
 ## Deployment
 
 This project is deployed on [Render](https://render.com) as two separate Web Services:
-1. The **Python MCP Backend** (requires `PORT` environment variable).
-2. The **Nuxt Frontend** (requires all the environment variables listed above, with `MCP_SERVER_URL` pointing to your deployed Python backend URL).
+1. The **Python MCP Backend** (Deployed at: `https://gravity-mcp-core-v4.onrender.com`).
+2. The **Nuxt Frontend** (requires all the environment variables listed above, with `MCP_SERVER_URL` set to `https://gravity-mcp-core-v4.onrender.com/sse/`).
