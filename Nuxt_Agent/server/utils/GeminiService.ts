@@ -27,7 +27,14 @@ If the user mentions an object but you don't know its exact API name, or if you 
 CRITICAL: You MUST use the execute_salesforce_graphql tool to fetch standard records. 
 If the user asks for aggregate data (like COUNT, MAX, GROUP BY), you MUST use the execute_salesforce_soql tool.
 Always format your final response clearly, using Markdown tables or lists as appropriate.
-Do not invent data; only show what the query returns.`;
+Do not invent data; only show what the query returns.
+
+When using the query_neo4j_graph tool:
+- The tool returns enriched results hydrated from Salesforce, NOT raw Cypher output.
+- Write Cypher queries using ONLY the \`id\` property for node filtering. Do NOT query for name, amount, stage, or other business properties in Cypher.
+- The response includes metadata: \`redacted_count\` (records hidden due to user permissions) and \`truncated_count\` (results capped for performance).
+- If \`redacted_count > 0\`, inform the user that some results were hidden due to their access permissions. Do not speculate about the hidden data.
+- If \`truncated_count > 0\`, inform the user that results were capped and suggest they refine their query.`;
   }
 
   async executeChat(historyMessages: any[], userMessage: string): Promise<string> {

@@ -9,6 +9,7 @@ from mcp.server.sse import SseServerTransport
 
 from salesforce_service import SalesforceService
 from neo4j_service import Neo4jService
+from hydration_service import HydrationService
 
 from dotenv import load_dotenv
 
@@ -44,26 +45,56 @@ neo4j_service = Neo4jService(
     password=neo4j_password
 )
 
+hydration_service = HydrationService()
+
 # Define tools using FastMCP
 @mcp.tool()
-async def query_neo4j_graph(query: str) -> list:
+async def query_neo4j_graph(query: str) -> dict:
     """
-    USE THIS TOOL when the user asks about relationships, networks, structural graph analysis, 
-    or complex connections between Accounts and Opportunities. 
-    It executes Cypher queries against the Neo4j Graph Database.
-    
+    USE THIS TOOL when the user asks about relationships, networks,
+    or connections between Accounts and Opportunities.
+
+    This tool executes Cypher against the Neo4j Graph Database and then
+    automatically enriches the results with live Salesforce data using
+    the current user's permissions. Results respect Salesforce FLS/OLS.
+
     CRITICAL SCHEMA INFORMATION:
-    - Nodes: `Account`, `Opportunity`
+    - Nodes: `Account`, `Opportunity` (contain only `id` property)
     - Relationships: `(a:Account)-[:HAS_OPPORTUNITY]->(o:Opportunity)`
-    - Account Properties: `id`, `name`, `industry`, `createdAt`, `updatedAt`
-    - Opportunity Properties: `id`, `name`, `amount`, `stage`, `createdAt`, `updatedAt`
-    
+    - Write Cypher queries using ONLY the `id` property for filtering.
+    - DO NOT query for name, amount, stage, etc. in Cypher — those
+      properties are hydrated automatically from Salesforce after traversal.
+
+    RESPONSE FORMAT:
+    Returns a dict with:
+    - `results`: List of hydrated records with full Salesforce properties.
+    - `metadata`: { total, hydrated, redacted_count, truncated_count }
+
+    If `redacted_count > 0`, some records were hidden due to user permissions.
+    If `truncated_count > 0`, results were capped at 50 for performance.
+
     Do NOT use this tool for fetching simple live, single-record updates from Salesforce.
-    
+
     Args:
         query: The Cypher query string to execute.
     """
-    return neo4j_service.execute_query(query)
+    # Phase 1: Traverse — execute Cypher to get raw IDs from the graph
+    raw_results = neo4j_service.execute_query(query)
+
+    # Check for Cypher execution errors
+    if raw_results and isinstance(raw_results[0], dict) and "error" in raw_results[0]:
+        error_msg = raw_results[0]["error"]
+        if "ServiceUnavailable" in error_msg or "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+            return {
+                "error": "The Neo4j Graph Database is currently asleep due to the Aura Free tier inactivity pause. Please tell the user to manually resume it in the Neo4j Aura console. Fall back to using standard SOQL queries.",
+                "results": [],
+                "metadata": {}
+            }
+        return {"error": error_msg, "results": [], "metadata": {}}
+
+    # Phase 2: Hydrate — enrich IDs with Salesforce data (permission-safe)
+    sf_service = current_sf_service.get()
+    return hydration_service.hydrate(raw_results, sf_service)
 
 @mcp.tool()
 async def execute_salesforce_graphql(query: str) -> dict:

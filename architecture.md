@@ -77,6 +77,25 @@ flowchart TD
 | Graph DB (Cypher) | LLM → MCP → Neo4j AuraDB | Relationship traversal, multi-hop reasoning (e.g., "which accounts have the most opportunities?") |
 | Hardcoded BFF Routes | Nuxt Server Route → Salesforce REST | Fixed UI dashboards, forms |
 
+### 2.5 Neo4j Security Model
+
+#### Index-Only Principle
+
+Neo4j stores only Salesforce Record IDs and relationship edges. No business properties (e.g., Account Name, Opportunity Amount) are persisted in the graph. All property data is hydrated Just-In-Time (JIT) from Salesforce using the user's OAuth token, ensuring that Salesforce's native Field-Level Security (FLS) and Object-Level Security (OLS) are enforced at query time. This means the graph is a structural index, not a data store.
+
+#### Edge Sensitivity Classification
+
+| Edge Type | Sensitivity | Notes |
+|---|---|---|
+| `(Account)-[:HAS_OPPORTUNITY]->(Opportunity)` | Low | Standard CRM relationship. Existence of the edge is not sensitive. |
+
+> [!IMPORTANT]
+> Any new node type or edge type added to the graph **MUST** be reviewed against this classification. If the existence of a relationship is itself sensitive (e.g., Patient → Diagnosis), additional edge-filtering logic is required in the HydrationService.
+
+#### Sync Strategy
+
+The current sync mechanism is an on-demand MCP tool (`sync_salesforce_to_neo4j`) that performs a full Salesforce-to-Neo4j sync of IDs and edges. For production, this should be replaced with Salesforce Change Data Capture (CDC) for near-real-time incremental updates.
+
 ## 3. Tradeoffs Accepted
 
 | Decision | Alternative Considered | Why We Accepted This |
@@ -86,6 +105,7 @@ flowchart TD
 | **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | We retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power specific, deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
 | **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | We retained the custom `find_object_api_name` MCP tool in Python because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
 | **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | We accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
+| **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. We accept the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. |
 | **BFF Pattern** | Direct frontend-to-Salesforce API calls | We traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
 | **Two separate services (Nuxt + Python)** | Monorepo with a single Node process | Keeps language runtimes isolated; each service can be scaled, deployed, and restarted independently on Render. |
 

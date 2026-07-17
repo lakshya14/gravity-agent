@@ -11,7 +11,7 @@ class Neo4jService:
     """
     
     def __init__(self, uri: str, username: str, password: str):
-        self.driver = GraphDatabase.driver(uri, auth=(username, password))
+        self.driver = GraphDatabase.driver(uri, auth=(username, password), connection_timeout=5.0)
         
     def close(self):
         """Closes the driver connection."""

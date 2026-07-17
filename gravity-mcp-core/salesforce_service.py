@@ -120,6 +120,43 @@ class SalesforceService:
         except requests.exceptions.RequestException as error:
             return self._handle_api_error(f"search object label '{label}'", error, locals().get('response'))
 
+    # Field definitions for JIT hydration (Index-Only Neo4j architecture).
+    # When the HydrationService needs to enrich raw Salesforce IDs returned
+    # by Neo4j, it uses these field lists to build batch SOQL queries.
+    HYDRATION_FIELDS = {
+        "Account": ["Id", "Name", "Industry", "Phone", "Type"],
+        "Opportunity": ["Id", "Name", "StageName", "Amount", "CloseDate", "AccountId"],
+    }
+
+    def fetch_records_by_ids(self, object_name: str, record_ids: list[str]) -> Dict[str, Any]:
+        """
+        Fetches multiple records by their Salesforce IDs in a single SOQL query.
+        
+        Uses the current user's OAuth token, so Salesforce natively enforces
+        Field-Level Security (FLS) and Object-Level Security (OLS).
+        
+        Args:
+            object_name: The Salesforce object API name (e.g., 'Account').
+            record_ids: A list of 18-character Salesforce record IDs.
+            
+        Returns:
+            A dict with a 'records' key containing the fetched records, or
+            a dict with 'error' and 'details' keys on failure.
+        """
+        if not record_ids:
+            return {"records": []}
+            
+        fields = self.HYDRATION_FIELDS.get(object_name)
+        if not fields:
+            return {"error": f"No hydration field mapping defined for object: {object_name}"}
+            
+        field_list = ", ".join(fields)
+        id_list = "', '".join(record_ids)
+        query = f"SELECT {field_list} FROM {object_name} WHERE Id IN ('{id_list}')"
+        
+        logger.info("Hydrating %d %s records via SOQL", len(record_ids), object_name)
+        return self.run_soql_query(query)
+
     def _handle_api_error(self, action: str, error: Exception, response: Optional[requests.Response] = None) -> Dict[str, Any]:
         """
         Centralized error handling for API requests.
