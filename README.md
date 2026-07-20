@@ -1,10 +1,12 @@
 # Gravity Agent
 
-Gravity is an **integration architecture** that connects a modern AI agent to Salesforce CRM and a Neo4j Graph Database. It bridges a Nuxt 4 web interface, Google Gemini AI, and a Python MCP server into a single cohesive platform where users can interact with their Salesforce data — including relationship-aware graph queries — through natural language.
+Gravity is an **AI agent platform** that lets users interact with Salesforce CRM data — including relationship-aware graph queries — through natural language.
+
+It bridges a Nuxt 4 web interface, Google Gemini AI, and a Python MCP server into a single integration architecture, backed by Neo4j for multi-hop relationship reasoning.
 
 **Live Project:** [View Live on Render](https://gravity-agent-v4.onrender.com)
 
-### How it fits together
+## How It Fits Together
 
 ```
 User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
@@ -19,7 +21,7 @@ User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
 
 ## Tech Stack
 
-- **Frontend & API**: Nuxt 4 (Vue 3, Nitro Server Engine)
+- **Frontend & API**: Nuxt 4 (Vue 3, TypeScript, Nitro)
 - **AI Integration**: Google Gemini SDK (`@google/genai`)
 - **Agent Tooling**: FastMCP (Python) server
 - **Graph Database**: Neo4j AuraDB (Cypher)
@@ -38,10 +40,11 @@ User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
 - Python (3.10+)
 - Google Gemini API Key
 - Salesforce Developer Org with a configured Connected App/External Client App (OAuth)
+- Neo4j AuraDB instance (free tier available)
 
 ### 2. Environment Variables
 
-**Nuxt Agent** — Create a `.env` file inside the `Nuxt_Agent` directory:
+**Nuxt App** — Create a `.env` file inside the `Nuxt_Agent` directory:
 
 ```env
 # AI Keys
@@ -69,6 +72,9 @@ NEO4J_PASSWORD=your_password
 ```
 
 ### 3. Running the Python MCP Server
+
+> Start the MCP server first — the Nuxt app connects to it on startup.
+
 Open a terminal and start the backend:
 ```bash
 cd gravity-mcp-core
@@ -88,6 +94,13 @@ npm run dev
 
 ## Deployment
 
-This project is deployed on [Render](https://render.com) as two separate Web Services:
-1. The **Python MCP Backend** (Deployed at: `https://gravity-mcp-core-v4.onrender.com`).
-2. The **Nuxt Frontend** (requires all the environment variables listed above, with `MCP_SERVER_URL` set to `https://gravity-mcp-core-v4.onrender.com/sse/`).
+This project is deployed on [Render](https://render.com) (free tier) as two separate Web Services from the same monorepo:
+
+| Service | Root Directory | Build Command | Start Command |
+|---|---|---|---|
+| **Nuxt Frontend** | `Nuxt_Agent` | `npm install && npm run build` | `node .output/server/index.mjs` |
+| **Python MCP Backend** | `gravity-mcp-core` | `pip install -r requirements.txt` | `python server.py` |
+
+The Nuxt service requires all the environment variables listed above, with `MCP_SERVER_URL` pointing to the MCP backend's deployed URL.
+
+> **Note:** Render free-tier services spin down after ~15 minutes of inactivity. The first request after idle may take 30–60s while the services cold-start.

@@ -13,7 +13,7 @@ Gravity is fundamentally an **integration architecture**: it acts as a translati
 | Agent Tooling | FastMCP (Python, JSON-RPC/SSE) | Exposes Salesforce and Graph DB tools to the LLM via MCP |
 | Graph Database | Neo4j AuraDB (Cypher) | Relationship traversal, multi-hop reasoning over Salesforce entities |
 | CRM System | Salesforce | Source of truth for all business data |
-| Deployment | Render | Hosts both Nuxt and Python services as separate web services |
+| Deployment | Render (free tier) | Hosts Nuxt and Python as separate Web Services from the same monorepo |
 
 ## 2. Architecture & Integration
 
@@ -100,14 +100,15 @@ The current sync mechanism is an on-demand MCP tool (`sync_salesforce_to_neo4j`)
 
 | Decision | Alternative Considered | Why We Accepted This |
 |---|---|---|
-| **Salesforce User OAuth (Impersonation)** | Service Account / Integration User | We chose OAuth so that Salesforce automatically enforces Field-Level Security (FLS) for each user. We traded the simplicity of a Service Account for robust, native Salesforce security. |
-| **Agentic GraphQL via MCP** | Hardcoded REST Endpoints for all data access | We accepted the risk of malformed AI queries (hallucinations) to gain extreme flexibility. The agent can explore custom Salesforce instances dynamically without requiring new backend endpoints. |
-| **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | We retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power specific, deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
-| **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | We retained the custom `find_object_api_name` MCP tool in Python because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
-| **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | We accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
-| **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. We accept the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. |
-| **BFF Pattern** | Direct frontend-to-Salesforce API calls | We traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
+| **Salesforce User OAuth (Per-User Delegation)** | Service Account / Integration User | OAuth ensures Salesforce automatically enforces Field-Level Security (FLS) per user. Traded the simplicity of a Service Account for robust, native Salesforce security. |
+| **Agentic GraphQL via MCP** | Hardcoded REST Endpoints for all data access | Accepted the risk of malformed AI queries (hallucinations) to gain extreme flexibility. The agent can explore custom Salesforce instances dynamically without requiring new backend endpoints. |
+| **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | Retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
+| **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | Retained the custom `find_object_api_name` MCP tool because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
+| **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | Accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
+| **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. Accepted the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. |
+| **BFF Pattern** | Direct frontend-to-Salesforce API calls | Traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
 | **Two separate services (Nuxt + Python)** | Monorepo with a single Node process | Keeps language runtimes isolated; each service can be scaled, deployed, and restarted independently on Render. |
+| **Public Web Service for MCP Backend** | Render Private Service (Internal Network) | Private Services are paid; unnecessary for a portfolio project. The exposure is already mitigated by architecture: Salesforce tools require a valid OAuth token passed per-request from the BFF (no token = no data), and Neo4j stores only Record IDs and edges (Index-Only Principle), so even direct access yields no business data. The real security boundary is the OAuth token, not network isolation. |
 
 ## 4. Non-Functional Characteristics
 
