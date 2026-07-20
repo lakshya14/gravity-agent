@@ -163,8 +163,10 @@ function connectToSalesforce(env) {
   // Fire and forget: ping the status endpoint to trigger a cold start on Render
   $fetch('/api/python/status').catch(e => console.error('Failed to ping python server:', e))
   
-  // Proceed with authentication
-  window.location.href = `/api/auth/login?env=${env}`
+  // Proceed with authentication after a tiny delay to ensure the request isn't cancelled
+  setTimeout(() => {
+    window.location.href = `/api/auth/login?env=${env}`
+  }, 150)
 }
 
 const features = [

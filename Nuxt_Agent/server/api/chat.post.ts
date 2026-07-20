@@ -1,4 +1,4 @@
-import { consola } from 'consola';
+import { logger } from '../utils/logger';
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
@@ -30,6 +30,7 @@ export default defineEventHandler(async (event) => {
       accessToken,
       instanceUrl,
       config.mcpServerUrl as string,
+      event.context.reqId as string,
       config.geminiApiKey2 as string
     );
 
@@ -37,10 +38,7 @@ export default defineEventHandler(async (event) => {
     const text = await geminiService.executeChat(historyMessages, userMessage);
     return { reply: text };
   } catch (error: any) {
-    consola.error('[Chat API] Communication failed:', error.message || error);
-    if (error.stack) {
-      consola.error(error.stack);
-    }
+    logger.error({ err: error, reqId: event.context.reqId }, '[Chat API] Communication failed');
     
     // Pass up user-friendly error messages from GeminiService
     if (typeof error === 'string') {

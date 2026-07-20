@@ -10,7 +10,7 @@ from mcp.server.sse import SseServerTransport
 from salesforce_service import SalesforceService
 from neo4j_service import Neo4jService
 from hydration_service import HydrationService
-
+import structlog
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -26,6 +26,15 @@ mcp = FastMCP(name="GravityCore")
 # Context variable to hold the SalesforceService for the current request
 current_sf_service: ContextVar[SalesforceService] = ContextVar("current_sf_service")
 
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars, # Pulls in our correlation ID!
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer()
+    ]
+)
+logger = structlog.get_logger("gravity_mcp")
 # Validate Neo4j environment variables before initializing the driver
 neo4j_uri = os.getenv("NEO4J_URI")
 neo4j_username = os.getenv("NEO4J_USERNAME")
@@ -179,7 +188,10 @@ async def sse_app(scope, receive, send):
     
     access_token = request.query_params.get("access_token")
     instance_url = request.query_params.get("instance_url")
-    
+    correlation_id = request.query_params.get("correlation_id", 'unknown')
+    structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
+
+
     if not access_token or not instance_url:
         logger.error("Missing access_token or instance_url in SSE connection")
     else:

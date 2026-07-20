@@ -14,31 +14,28 @@ export default defineEventHandler(async (event) => {
   }
 
   const healthUrl = `${baseUrl}/health`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  // We race the fetch against a timeout. We DO NOT abort the fetch if it times out, 
+  // because we want the connection to stay alive so Render completes the cold start.
+  const fetchPromise = fetch(healthUrl).then(res => res.ok).catch(() => false);
+  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 5000));
 
   try {
-    const response = await fetch(healthUrl, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (response.ok) {
-      return { status: 'running' };
-    }
-    return { status: 'stopped' };
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-
-    // The probe failed — service is cold or starting. Fire a long-running
-    // wake-up request that keeps the connection alive for up to 60 seconds,
-    // giving Render enough time to complete the cold start. We don't await it.
-    const wakeController = new AbortController();
-    const wakeTimeout = setTimeout(() => wakeController.abort(), 60000);
-    fetch(healthUrl, { signal: wakeController.signal })
-      .then(() => clearTimeout(wakeTimeout))
-      .catch(() => clearTimeout(wakeTimeout));
-
-    if (error.name === 'AbortError') {
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    
+    if (result === 'timeout') {
+      // It took longer than 5s, server is likely cold starting.
+      // The fetchPromise is still running in the background.
+      if (typeof event.waitUntil === 'function') {
+        event.waitUntil(fetchPromise);
+      }
       return { status: 'waking_up' };
+    } else if (result === true) {
+      return { status: 'running' };
+    } else {
+      return { status: 'stopped' };
     }
-    return { status: 'waking_up' };
+  } catch (error) {
+    return { status: 'stopped', error: 'Failed to ping server' };
   }
 });

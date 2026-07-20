@@ -2,19 +2,22 @@ import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import commonSchema from './common_schema.json';
-
+import { chatMessage } from '../../types/mcp';
+import {McpToolCallArgs } from '../../types/mcp';
 export class GeminiService {
   private primaryKey: string;
   private fallbackKey?: string;
   private accessToken: string;
   private instanceUrl: string;
   private mcpServerUrl: string;
+  private reqId: string;
 
-  constructor(primaryKey: string, accessToken: string, instanceUrl: string, mcpServerUrl: string, fallbackKey?: string) {
+  constructor(primaryKey: string, accessToken: string, instanceUrl: string, mcpServerUrl: string, reqId: string, fallbackKey?: string) {
     this.primaryKey = primaryKey;
     this.accessToken = accessToken;
     this.instanceUrl = instanceUrl;
     this.mcpServerUrl = mcpServerUrl;
+    this.reqId = reqId;
     this.fallbackKey = fallbackKey;
   }
 
@@ -37,7 +40,7 @@ When using the query_neo4j_graph tool:
 - If \`truncated_count > 0\`, inform the user that results were capped and suggest they refine their query.`;
   }
 
-  async executeChat(historyMessages: any[], userMessage: string): Promise<string> {
+  async executeChat(historyMessages: chatMessage[], userMessage: string): Promise<string> {
     const keys = [this.primaryKey, this.fallbackKey].filter(Boolean) as string[];
 
     for (const [index, key] of keys.entries()) {
@@ -76,7 +79,7 @@ When using the query_neo4j_graph tool:
       .some(keyword => message.includes(keyword));
   }
 
-  private async runChat(apiKey: string, historyMessages: any[], userMessage: string): Promise<string> {
+  private async runChat(apiKey: string, historyMessages: chatMessage[], userMessage: string): Promise<string> {
     if (!apiKey) throw new Error("API Key is missing");
     
     // 1. Establish the MCP Connection
@@ -84,6 +87,7 @@ When using the query_neo4j_graph tool:
     const mcpUrl = new URL(this.mcpServerUrl);
     mcpUrl.searchParams.append('access_token', this.accessToken);
     mcpUrl.searchParams.append('instance_url', this.instanceUrl);
+    mcpUrl.searchParams.append('correlation_id', this.reqId);
 
     const transport = new SSEClientTransport(mcpUrl);
     const mcpClient = new Client({ name: "nuxt-agent", version: "1.0.0" }, { capabilities: {} });
@@ -124,7 +128,7 @@ When using the query_neo4j_graph tool:
         // Instead of an if/else block, we blindly forward the request to the MCP server!
         const result = await mcpClient.callTool({
           name: functionCall.name,
-          arguments: functionCall.args as any
+          arguments: functionCall.args as McpToolCallArgs 
         });
 
         // Gemini expects the response inside an object
