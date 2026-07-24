@@ -77,31 +77,36 @@
 
         <!-- Input -->
         <div class="chat-input-area">
-          <div class="chat-input-wrapper">
-            <input
-              id="agent-chat-input"
-              v-model="inputMessage"
-              type="text"
-              placeholder="Type your question..."
-              class="chat-input"
-              @keyup.enter="sendMessage"
-            />
-            <button
-              id="agent-chat-send"
-              class="chat-send-btn"
-              :disabled="!inputMessage.trim()"
-              @click="sendMessage"
-              aria-label="Send message"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m22 2-7 20-4-9-9-4z"/>
-                <path d="m22 2-11 11"/>
-              </svg>
-            </button>
+          <template v-if="isAuthenticated">
+            <div class="chat-input-wrapper">
+              <input
+                id="agent-chat-input"
+                v-model="inputMessage"
+                type="text"
+                placeholder="Type your question..."
+                class="chat-input"
+                @keyup.enter="sendMessage"
+              />
+              <button
+                id="agent-chat-send"
+                class="chat-send-btn"
+                :disabled="!inputMessage.trim()"
+                @click="sendMessage"
+                aria-label="Send message"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m22 2-7 20-4-9-9-4z"/>
+                  <path d="m22 2-11 11"/>
+                </svg>
+              </button>
+            </div>
+            <span class="chat-powered-by">
+              Powered by Google Gemini
+            </span>
+          </template>
+          <div v-else class="chat-login-prompt">
+            <p>Please <a href="/api/auth/login">connect to Salesforce</a> to start chatting.</p>
           </div>
-          <span class="chat-powered-by">
-            Powered by Google Gemini
-          </span>
         </div>
       </div>
     </Transition>
@@ -157,10 +162,33 @@ onMounted(async () => {
 })
 
 async function checkPythonStatus() {
+  if (!isAuthenticated.value) return;
   try {
     const res = await $fetch('/api/python/status')
     if (res.status === 'waking_up' || res.status === 'stopped') {
-      chatStore.addMessage('bot', 'System: Our service is starting, please wait for 30 secs.')
+      chatStore.addMessage('system', '⏳ Gravity Agent is getting ready, please wait a moment...')
+      scrollToBottom()
+      
+      let attempts = 0;
+      const maxAttempts = 30; // 30 * 2s = 60s max wait
+      
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const pollRes = await $fetch('/api/python/status');
+          if (pollRes.status === 'ok') {
+            chatStore.addMessage('system-success', '✨ Gravity Agent is ready! You can now send messages.');
+            scrollToBottom();
+            clearInterval(pollInterval);
+          }
+        } catch (e) {
+          // ignore polling errors
+        }
+        
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+        }
+      }, 2000);
     }
   } catch (error) {
     console.error('Failed to check python status', error)
@@ -171,6 +199,10 @@ function toggleChat() {
   chatStore.toggleChat()
   if (isOpen.value) {
     checkPythonStatus()
+    // Give the transition a tiny moment to start so scrollHeight is accurate
+    setTimeout(() => {
+      scrollToBottom()
+    }, 50)
   }
 }
 
@@ -201,8 +233,11 @@ async function sendMessage() {
   scrollToBottom()
 
   try {
-    // Sliding Window Payload Optimization: Send only the last 6 messages to LLM to save tokens
-    const recentMessages = messages.value.slice(-6).map(m => ({ role: m.role, content: m.content }))
+    // Sliding Window Payload Optimization: Send only the last 6 non-system messages to LLM to save tokens
+    const recentMessages = messages.value
+      .filter(m => m.role !== 'system' && m.role !== 'system-success')
+      .slice(-6)
+      .map(m => ({ role: m.role, content: m.content }))
 
     const response = await $fetch('/api/chat', {
       method: 'POST',
@@ -478,6 +513,30 @@ async function sendMessage() {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.chat-message.system, .chat-message.system-success {
+  justify-content: center;
+}
+
+.message-bubble.system {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.85em;
+  text-align: center;
+  padding: 8px 12px;
+}
+
+.message-bubble.system-success {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.85em;
+  text-align: center;
+  padding: 8px 12px;
+}
+
 .message-time {
   display: block;
   font-size: 10px;
@@ -609,6 +668,23 @@ async function sendMessage() {
   color: var(--color-text-muted);
   margin-top: var(--space-sm);
   opacity: 0.6;
+}
+
+.chat-login-prompt {
+  text-align: center;
+  padding: var(--space-xs) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.chat-login-prompt a {
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.chat-login-prompt a:hover {
+  text-decoration: underline;
 }
 
 /* --- Responsive --- */

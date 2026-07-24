@@ -34,10 +34,37 @@ Do not invent data; only show what the query returns.
 
 When using the query_neo4j_graph tool:
 - The tool returns enriched results hydrated from Salesforce, NOT raw Cypher output.
-- Write Cypher queries using ONLY the \`id\` property for node filtering. Do NOT query for name, amount, stage, or other business properties in Cypher.
+- Graph nodes and their structural properties:
+    Account     : id, name, industry, country, type
+    Opportunity : id, name, stageName, closeDate, type
+    User        : id, name, title  (the record owner / sales rep — NOT hydrated from SF)
+- Graph edges:
+    (Account)-[:HAS_OPPORTUNITY]->(Opportunity)
+    (User)-[:OWNS]->(Account)
+    (User)-[:OWNS]->(Opportunity)
+- DO NOT query for Amount, AnnualRevenue, Email, Phone in Cypher — those are hydrated from Salesforce automatically.
+- User nodes are self-contained in the graph (name + title already stored). Return them directly from Cypher — no Salesforce hydration needed.
 - The response includes metadata: \`redacted_count\` (records hidden due to user permissions) and \`truncated_count\` (results capped for performance).
 - If \`redacted_count > 0\`, inform the user that some results were hidden due to their access permissions. Do not speculate about the hidden data.
-- If \`truncated_count > 0\`, inform the user that results were capped and suggest they refine their query.`;
+- If \`truncated_count > 0\`, inform the user that results were capped and suggest they refine their query.
+
+FUZZY NAME MATCHING — follow this protocol whenever the user refers to a company, record, or rep by name:
+
+STEP 1 — Always search with a case-insensitive partial match, never an exact equality check.
+  For Accounts:      MATCH (a:Account) WHERE toLower(a.name) CONTAINS toLower($term) RETURN a.id, a.name
+  For Users / reps:  MATCH (u:User) WHERE toLower(u.name) CONTAINS toLower($term) RETURN u.id, u.name, u.title
+  Use this as a candidate lookup before writing any traversal query.
+
+STEP 2 — Decide based on what comes back:
+  - EXACTLY ONE result → HIGH CONFIDENCE. Proceed with the full query using that record's id.
+    Disclose to the user: "I'm showing results for **[exact name]** — let me know if you meant someone else."
+  - TWO TO FOUR results → AMBIGUOUS. Do NOT guess. Ask the user:
+    "I found a few matches for '[user term]': [list names]. Which one did you mean?"
+    Wait for confirmation before running the traversal.
+  - FIVE OR MORE results → TOO BROAD. Tell the user their search term is too generic and ask them to be more specific.
+  - ZERO results → NO MATCH. Tell the user no record was found matching that name and suggest checking the spelling.
+
+STEP 3 — Once you have a confirmed id, write the actual Cypher traversal using id-based filtering for precision.`;
   }
 
   async executeChat(historyMessages: chatMessage[], userMessage: string): Promise<string> {
@@ -120,8 +147,9 @@ When using the query_neo4j_graph tool:
       let response = await chat.sendMessage({ message: userMessage });
       let iterations = 0;
 
-      // 4. Dynamic Execution Loop
-      while (response.functionCalls && response.functionCalls.length > 0 && iterations < 3) {
+      // 4. Dynamic Execution Loop — limit is 5 to support:
+      //    fuzzy-match lookup (1) + traversal (2) + follow-up tool calls for complex multi-hop queries (3-5)
+      while (response.functionCalls && response.functionCalls.length > 0 && iterations < 5) {
         iterations++;
         const functionCall = response.functionCalls[0];
         

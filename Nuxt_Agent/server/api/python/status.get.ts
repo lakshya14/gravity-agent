@@ -1,4 +1,11 @@
-export default defineEventHandler(async (event) => {
+type ServerStatus = 'ok' | 'waking_up' | 'stopped';
+
+interface StatusResponse {
+  status: ServerStatus;
+  error?: string;
+}
+
+export default defineEventHandler(async (event): Promise<StatusResponse> => {
   const config = useRuntimeConfig();
   
   if (!config.mcpServerUrl) {
@@ -15,25 +22,46 @@ export default defineEventHandler(async (event) => {
 
   const healthUrl = `${baseUrl}/health`;
 
-  // We race the fetch against a timeout. We DO NOT abort the fetch if it times out, 
-  // because we want the connection to stay alive so Render completes the cold start.
-  const fetchPromise = fetch(healthUrl).then(res => res.ok).catch(() => false);
-  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 5000));
+  // Perform the health check fetch
+  const performHealthCheck = async (): Promise<boolean> => {
+    try {
+      const response = await fetch(healthUrl, { method: 'GET' });
+      if (!response.ok) return false;
+      
+      const data = await response.json();
+      return data?.status === 'ok';
+    } catch {
+      return false;
+    }
+  };
+
+  const fetchPromise = performHealthCheck();
+  
+  // Create a timeout promise (e.g., 5 seconds)
+  const timeoutPromise = new Promise<'timeout'>((resolve) => 
+    setTimeout(() => resolve('timeout'), 5000)
+  );
 
   try {
+    // Race the actual fetch against the timeout
     const result = await Promise.race([fetchPromise, timeoutPromise]);
     
     if (result === 'timeout') {
-      // It took longer than 5s, server is likely cold starting.
-      // The fetchPromise is still running in the background.
+      // Background the fetch promise to avoid unhandled rejections
+      // and allow the cold-start request to complete.
+      fetchPromise.catch(console.error);
+      
       if (typeof event.waitUntil === 'function') {
         event.waitUntil(fetchPromise);
       }
       return { status: 'waking_up' };
-    } else if (result === true) {
-      return { status: 'running' };
+    } 
+    
+    // Result is the boolean from performHealthCheck
+    if (result === true) {
+      return { status: 'ok' }; // Standardized to 'ok'
     } else {
-      return { status: 'stopped' };
+      return { status: 'stopped', error: 'Health check failed or returned unexpected payload' };
     }
   } catch (error) {
     return { status: 'stopped', error: 'Failed to ping server' };
