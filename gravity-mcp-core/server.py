@@ -12,6 +12,7 @@ from neo4j_service import Neo4jService
 from hydration_service import HydrationService
 import structlog
 from dotenv import load_dotenv
+from vector_service import VectorService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -60,19 +61,25 @@ hydration_service = HydrationService()
 @mcp.tool()
 async def query_neo4j_graph(query: str) -> dict:
     """
-    USE THIS TOOL when the user asks about relationships, networks,
-    or connections between Accounts and Opportunities.
+    USE THIS TOOL when the user asks about relationships, networks, connections,
+    or ownership patterns across Accounts, Opportunities, and Users (reps/owners).
 
     This tool executes Cypher against the Neo4j Graph Database and then
     automatically enriches the results with live Salesforce data using
     the current user's permissions. Results respect Salesforce FLS/OLS.
 
     CRITICAL SCHEMA INFORMATION:
-    - Nodes: `Account`, `Opportunity` (contain only `id` property)
-    - Relationships: `(a:Account)-[:HAS_OPPORTUNITY]->(o:Opportunity)`
-    - Write Cypher queries using ONLY the `id` property for filtering.
-    - DO NOT query for name, amount, stage, etc. in Cypher — those
-      properties are hydrated automatically from Salesforce after traversal.
+    - Node `Account`     : id, name, industry, country, type
+    - Node `Opportunity` : id, name, stageName, closeDate, type
+    - Node `User`        : id, name, title  (the record owner / sales rep)
+    - Relationship `(a:Account)-[:HAS_OPPORTUNITY]->(o:Opportunity)`
+    - Relationship `(u:User)-[:OWNS]->(a:Account)`
+    - Relationship `(u:User)-[:OWNS]->(o:Opportunity)`
+    - You CAN filter/sort by any structural property directly in Cypher.
+    - DO NOT query for Amount, AnnualRevenue, Email, Phone in Cypher — those
+      are FLS-sensitive and are hydrated automatically from Salesforce after traversal.
+    - User nodes are NOT hydrated by Salesforce — name and title are already
+      stored in the graph and are safe to return directly from Cypher.
 
     RESPONSE FORMAT:
     Returns a dict with:
@@ -139,13 +146,22 @@ async def find_object_api_name(label: str) -> dict:
     sf_service = current_sf_service.get()
     return sf_service.find_object_api_name(label)
 
-from ingestion_script import setup_constraints, ingest_accounts, ingest_opportunities
+from neo4j_ingestion import setup_constraints, ingest_accounts, ingest_opportunities
 
 @mcp.tool()
 async def sync_salesforce_to_neo4j() -> dict:
     """
-    Extracts Accounts and Opportunities from Salesforce and pushes them into the Neo4j Graph DB.
+    Extracts Accounts, Opportunities, and their owning Users from Salesforce
+    and pushes them into the Neo4j Graph DB with all structural properties.
     Also ensures database constraints are active.
+
+    Graph schema after sync:
+    - Nodes  : Account (id, name, industry, country, type)
+    -          Opportunity (id, name, stageName, closeDate, type)
+    -          User (id, name, title)
+    - Edges  : (Account)-[:HAS_OPPORTUNITY]->(Opportunity)
+    -          (User)-[:OWNS]->(Account)
+    -          (User)-[:OWNS]->(Opportunity)
     """
     sf_service = current_sf_service.get()
     
@@ -164,7 +180,13 @@ async def sync_salesforce_to_neo4j() -> dict:
             "opportunities": opp_res
         }
     }
-
+@mcp.tool()
+def search_sales_documents(query: str, limit: int = 5) -> dict:
+    """
+    Searches for documents semantically similar to the query.
+    """
+    vector_service = VectorService()
+    return vector_service.search_documents(query, limit)
 # ==========================================
 # FastAPI Application & SSE Transport Setup
 # ==========================================
