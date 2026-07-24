@@ -79,15 +79,42 @@ flowchart TD
 
 ### 2.5 Neo4j Security Model
 
-#### Index-Only Principle
+#### Structural Index Principle
 
-Neo4j stores only Salesforce Record IDs and relationship edges. No business properties (e.g., Account Name, Opportunity Amount) are persisted in the graph. All property data is hydrated Just-In-Time (JIT) from Salesforce using the user's OAuth token, ensuring that Salesforce's native Field-Level Security (FLS) and Object-Level Security (OLS) are enforced at query time. This means the graph is a structural index, not a data store.
+Neo4j stores **structural (non-FLS-gated) properties** alongside Salesforce Record IDs and relationship edges. Financial, PII, and permission-sensitive data are **not** persisted; they are hydrated Just-In-Time (JIT) from Salesforce using the user's OAuth token, ensuring Salesforce's native Field-Level Security (FLS) and Object-Level Security (OLS) are enforced at query time.
+
+This means Neo4j is a **structural reasoning layer**, not a data replica.
+
+#### Property Classification
+
+| Property | Stored in Neo4j | Why |
+|---|---|---|
+| `Account.Id` | ✅ Yes | Graph traversal anchor |
+| `Account.Name` | ✅ Yes | Low-sensitivity structural classifier |
+| `Account.Industry` | ✅ Yes | Classification metadata; not FLS-gated |
+| `Account.BillingCountry` | ✅ Yes | Structural; not PII |
+| `Account.Type` | ✅ Yes | Categorical label |
+| `Account.AnnualRevenue` | ❌ No — JIT from SF | Financial; may be FLS-gated |
+| `Opportunity.Id` | ✅ Yes | Graph traversal anchor |
+| `Opportunity.Name` | ✅ Yes | Structural label |
+| `Opportunity.StageName` | ✅ Yes | Pipeline stage; universally visible in CRM |
+| `Opportunity.CloseDate` | ✅ Yes | Temporal classifier; not a financial figure |
+| `Opportunity.Type` | ✅ Yes | Categorical (New Business, Renewal, etc.) |
+| `Opportunity.Amount` | ❌ No — JIT from SF | Financial; FLS-sensitive |
+| `User.Id` | ✅ Yes | Graph traversal anchor for ownership edges |
+| `User.Name` | ✅ Yes | Business identity; not PII in B2B CRM context |
+| `User.Title` | ✅ Yes | Role/seniority; structural |
+| `User.Email` | ❌ No — JIT from SF | PII |
+| Any Contact PII (Email, Phone) | ❌ No — JIT from SF | PII; sharing-model dependent |
+| Custom permission-gated fields | ❌ No — JIT from SF | Variable FLS per Salesforce org |
 
 #### Edge Sensitivity Classification
 
 | Edge Type | Sensitivity | Notes |
 |---|---|---|
 | `(Account)-[:HAS_OPPORTUNITY]->(Opportunity)` | Low | Standard CRM relationship. Existence of the edge is not sensitive. |
+| `(User)-[:OWNS]->(Account)` | Low | Record ownership is visible to all internal users in a standard CRM org. |
+| `(User)-[:OWNS]->(Opportunity)` | Low | Same as above; OwnerId is not a restricted field. |
 
 > [!IMPORTANT]
 > Any new node type or edge type added to the graph **MUST** be reviewed against this classification. If the existence of a relationship is itself sensitive (e.g., Patient → Diagnosis), additional edge-filtering logic is required in the HydrationService.
@@ -105,7 +132,7 @@ The current sync mechanism is an on-demand MCP tool (`sync_salesforce_to_neo4j`)
 | **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | Retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
 | **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | Retained the custom `find_object_api_name` MCP tool because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
 | **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | Accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
-| **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. Accepted the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. |
+| **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. Accepted the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. **Evolved to "Structural Index":** Non-FLS-gated structural fields (Name, Industry, StageName, CloseDate, Type) are now stored in Neo4j to enable graph-native filtering. Financial and PII fields remain JIT-hydrated. |
 | **BFF Pattern** | Direct frontend-to-Salesforce API calls | Traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
 | **Two separate services (Nuxt + Python)** | Monorepo with a single Node process | Keeps language runtimes isolated; each service can be scaled, deployed, and restarted independently on Render. |
 | **Public Web Service for MCP Backend** | Render Private Service (Internal Network) | Private Services are paid; unnecessary for a portfolio project. The exposure is already mitigated by architecture: Salesforce tools require a valid OAuth token passed per-request from the BFF (no token = no data), and Neo4j stores only Record IDs and edges (Index-Only Principle), so even direct access yields no business data. The real security boundary is the OAuth token, not network isolation. |
