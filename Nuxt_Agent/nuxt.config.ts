@@ -13,6 +13,7 @@ export default defineNuxtConfig({
     salesforceLoginUrl: process.env.SALESFORCE_LOGIN_URL || 'https://login.salesforce.com',
     sessionPassword: process.env.NUXT_SESSION_PASSWORD,
     mcpServerUrl: process.env.MCP_SERVER_URL || 'http://127.0.0.1:8000/sse/',
+    neonDatabaseUrl: process.env.NEON_DATABASE_URL,
   },
 
   css: ['~/assets/css/main.css'],

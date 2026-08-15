@@ -9,12 +9,14 @@ from contextvars import ContextVar
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
 
-from salesforce_service import SalesforceService
+from salesforce_service import SalesforceService, global_http_client
 from neo4j_service import Neo4jService
 from hydration_service import HydrationService
 import structlog
 from dotenv import load_dotenv
 from vector_service import VectorService
+import psycopg2
+import psycopg2.pool
 
 # Load environment variables from .env file
 load_dotenv()
@@ -64,6 +66,19 @@ if os.getenv("NEON_DATABASE_URL"):
     logger.info("VectorService initialized successfully.")
 else:
     logger.warning("NEON_DATABASE_URL missing. Vector search tools will be DISABLED.")
+
+# A dedicated connection pool for chat_history queries, separate from VectorService's
+# pool so that conversation recall and vector search don't compete for the same connections.
+# Kept small (max 3) since recall is a low-frequency, on-demand operation.
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
+chat_history_pool = None
+if NEON_DATABASE_URL:
+    chat_history_pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=1,
+        maxconn=3,
+        dsn=NEON_DATABASE_URL
+    )
+    logger.info("chat_history_pool initialized successfully.")
 
 # Define tools using FastMCP
 if neo4j_service:
@@ -166,6 +181,93 @@ async def execute_salesforce_soql(query: str) -> dict:
     return await sf_service.run_soql_query(query)
 
 @mcp.tool()
+async def search_past_conversations(search_query: str) -> dict:
+    """
+    Search the current user's past chat history for a keyword or topic.
+
+    Use this tool when the user explicitly references a previous conversation,
+    e.g. "what did we talk about yesterday?", "what did you say about Acme Corp earlier?",
+    or "remind me of my last question about pipeline". Do NOT call this proactively.
+
+    The search performs a case-insensitive substring match (ILIKE) against stored
+    message content and returns up to 20 results ordered newest-first.
+
+    User identity is resolved from the active Salesforce OAuth session, so results
+    are always scoped to the calling user — no cross-user data is accessible.
+
+    Args:
+        search_query: A specific keyword or short topic phrase to search for
+                      (e.g. "opportunity pipeline", "account health").
+                      Keep it concise — not a full sentence.
+
+    Returns:
+        {"results": [{"role": str, "content": str, "created_at": str}, ...]}
+        or {"error": str} if the lookup fails.
+    """
+    # --- Input validation ---
+    # Guard against empty or excessively long queries that could be slow for Postgres.
+    if not search_query or not search_query.strip():
+        return {"error": "search_query must not be empty."}
+    if len(search_query) > 500:
+        return {"error": "search_query is too long. Please use a shorter keyword or phrase."}
+    search_query = search_query.strip()
+
+    # --- Step 1: Resolve the current user's Salesforce ID ---
+    # We re-verify identity here rather than trusting any client-passed value,
+    # ensuring a user can only ever search their own conversation history.
+    sf_service = current_sf_service.get()
+    url = f"{sf_service.instance_url}/services/oauth2/userinfo"
+    try:
+        response = await global_http_client.get(url, headers=sf_service.headers)
+        response.raise_for_status()
+        user_id = response.json().get("user_id")
+    except Exception as e:
+        logger.error(f"[search_past_conversations] Failed to resolve user identity: {e}")
+        return {"error": "Could not verify current user identity. Please try again."}
+
+    if not user_id:
+        return {"error": "Could not determine current user ID from Salesforce session."}
+
+    # --- Step 2: Query the chat_history pool ---
+    # We use the module-level ThreadedConnectionPool (chat_history_pool) rather than
+    # opening a raw psycopg2.connect() per call. Opening a raw connection each time
+    # incurs a full TCP + TLS handshake to Neon (~100-300ms) and can exhaust
+    # Neon's connection limits under load. The pool reuses existing connections.
+    if not chat_history_pool:
+        return {"error": "Chat history database is not configured on this server."}
+
+    def _search_db() -> list[dict]:
+        """Synchronous DB search — always called via asyncio.to_thread to avoid blocking the event loop."""
+        conn = chat_history_pool.getconn()
+        try:
+            cur = conn.cursor()
+            # Parameterized query — user_id and the ILIKE pattern are always passed
+            # as bind parameters, so there is no SQL injection risk from search_query.
+            cur.execute(
+                """
+                SELECT role, content, created_at
+                FROM chat_history
+                WHERE user_id = %s AND content ILIKE %s
+                ORDER BY created_at DESC
+                LIMIT 20
+                """,
+                (user_id, f"%{search_query}%")
+            )
+            rows = cur.fetchall()
+            return [{"role": r[0], "content": r[1], "created_at": r[2].isoformat()} for r in rows]
+        finally:
+            cur.close()
+            # Always return the connection to the pool, even on error.
+            chat_history_pool.putconn(conn)
+
+    try:
+        results = await asyncio.to_thread(_search_db)
+        return {"results": results}
+    except Exception as e:
+        logger.error(f"[search_past_conversations] DB query failed: {e}")
+        return {"error": str(e)}
+
+@mcp.tool()
 async def find_object_api_name(label: str) -> dict:
     """
     Search for an object's API name by its label.
@@ -246,6 +348,9 @@ async def shutdown_event():
     if vector_service:
         logger.info("Shutting down — closing VectorService connection pool...")
         vector_service.close()
+    if chat_history_pool:
+        logger.info("Shutting down — closing chat_history connection pool...")
+        chat_history_pool.closeall()
 
 async def sse_app(scope, receive, send):
     scope_dict = dict(scope)

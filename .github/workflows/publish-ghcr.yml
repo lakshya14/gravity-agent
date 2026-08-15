@@ -1,0 +1,109 @@
+name: Build and Publish to GHCR
+
+on:
+  push:
+    branches:
+      - v5
+    paths:
+      - 'Nuxt_Agent/**'
+      - 'gravity-mcp-core/**'
+      - '.github/workflows/publish-ghcr.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  NUXT_IMAGE_NAME: ${{ github.repository_owner }}/gravity-nuxt
+  MCP_IMAGE_NAME: ${{ github.repository_owner }}/gravity-mcp
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      nuxt: ${{ steps.filter.outputs.nuxt }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            nuxt:
+              - 'Nuxt_Agent/**'
+              - '.github/workflows/publish-ghcr.yml'
+            mcp:
+              - 'gravity-mcp-core/**'
+              - '.github/workflows/publish-ghcr.yml'
+
+  build-and-push-nuxt:
+    needs: changes
+    if: ${{ needs.changes.outputs.nuxt == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Build and Push Nuxt Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Nuxt
+        id: meta-nuxt
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.NUXT_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build and push Nuxt image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Nuxt_Agent
+          push: true
+          tags: ${{ steps.meta-nuxt.outputs.tags }}
+          labels: ${{ steps.meta-nuxt.outputs.labels }}
+
+  build-and-push-mcp:
+    needs: changes
+    if: ${{ needs.changes.outputs.mcp == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Build and Push MCP Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for MCP
+        id: meta-mcp
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.MCP_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build and push MCP image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gravity-mcp-core
+          push: true
+          tags: ${{ steps.meta-mcp.outputs.tags }}
+          labels: ${{ steps.meta-mcp.outputs.labels }}
