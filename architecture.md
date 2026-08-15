@@ -9,10 +9,13 @@ Gravity is fundamentally an **integration architecture**: it acts as a translati
 | Layer | Technology | Role |
 |---|---|---|
 | Frontend & BFF | Nuxt 4 (Vue 3, TypeScript, Nitro) | UI rendering, OAuth handling, LLM orchestration |
-| AI Integration | Google Gemini SDK (`@google/genai`) | Reasoning, tool-calling, response generation |
+| AI Integration | Google Gemini SDK (`@google/genai`) | Reasoning, tool-calling, response generation (inc. embeddings) |
 | Agent Tooling | FastMCP (Python, JSON-RPC/SSE) | Exposes Salesforce and Graph DB tools to the LLM via MCP |
 | Graph Database | Neo4j AuraDB (Cypher) | Relationship traversal, multi-hop reasoning over Salesforce entities |
+| Vector Database | Neon Serverless Postgres (`pgvector`) | Semantic search, RAG for unstructured document retrieval |
 | CRM System | Salesforce | Source of truth for all business data |
+| Observability | Pino (NDJSON) | Structured tool call trace logging for agent debugging |
+| Evals | Promptfoo | LLM-as-a-judge evaluations and negative constraint testing |
 | Deployment | Render (free tier) | Hosts Nuxt and Python as separate Web Services from the same monorepo |
 
 ## 2. Architecture & Integration
@@ -34,18 +37,22 @@ flowchart TD
         GraphQL["Agentic GraphQL Tool"]
         SOQL["SOQL Tools"]
         GraphDB_Tool["Graph DB Tool (Cypher)"]
+        Vector_Tool["Vector Search Tool (pgvector)"]
     end
 
     Neo4j[("🔷 Neo4j AuraDB")]
+    NeonDB[("🐘 Neon Postgres\n(pgvector)")]
     SF[("☁️ Salesforce CRM")]
 
     User -->|"HTTP / WebSocket"| UI
     UI -->|"API calls"| BFF
     BFF -->|"OAuth token + prompt"| LLM
     LLM -->|"MCP tool calls (JSON-RPC)"| MCP_Server
-    MCP_Server --> GraphQL & SOQL & GraphDB_Tool
+    MCP_Server --> GraphQL & SOQL & GraphDB_Tool & Vector_Tool
     GraphQL & SOQL -->|"Authenticated API calls\n(OAuth token passed from Nuxt)"| SF
     GraphDB_Tool -->|"Cypher queries"| Neo4j
+    Vector_Tool -->|"Generate Embeddings\nvia Gemini API"| Vector_Tool
+    Vector_Tool -->|"Cosine Similarity queries"| NeonDB
     BFF -->|"Hardcoded SOQL / REST\n(deterministic UI routes)"| SF
 ```
 
@@ -75,6 +82,7 @@ flowchart TD
 | Agentic GraphQL | LLM → MCP → Salesforce GraphQL API | Dynamic, AI-driven exploration |
 | SOQL (via MCP) | LLM → MCP → Salesforce SOQL | Aggregate queries, structured searches, schema discovery |
 | Graph DB (Cypher) | LLM → MCP → Neo4j AuraDB | Relationship traversal, multi-hop reasoning (e.g., "which accounts have the most opportunities?") |
+| Semantic Search (Vector) | LLM → MCP → Gemini Embeddings → Neon Postgres | RAG over unstructured data (documents, emails) using vector cosine similarity |
 | Hardcoded BFF Routes | Nuxt Server Route → Salesforce REST | Fixed UI dashboards, forms |
 
 ### 2.5 Neo4j Security Model
@@ -132,10 +140,13 @@ The current sync mechanism is an on-demand MCP tool (`sync_salesforce_to_neo4j`)
 | **Keeping Hardcoded BFF Routes for UI** | Full transition to Agentic GraphQL for everything | Retained hardcoded BFF routes (e.g., `opportunities.get.ts`) and `SalesforceService.ts` to power deterministic UI dashboards and forms, avoiding the latency and unreliability of an LLM formulating queries for standard views. |
 | **Custom MCP Introspection Tool** | Full GraphQL Schema Introspection | Retained the custom `find_object_api_name` MCP tool because standard Salesforce GraphQL schema introspection is massively heavy and costly. This optimization prevents performance bottlenecks for the LLM. |
 | **Neo4j AuraDB for Graph Queries** | Querying relationships via Salesforce SOQL JOINs or multiple API calls | Accepted the operational overhead of a separate Graph DB to gain native multi-hop traversal and relationship reasoning. SOQL is limited to 5-level parent-child relationships and cannot perform graph-style pathfinding. Neo4j enables the agent to reason about entity networks (e.g., account portfolios, opportunity clustering) that would be impractical via API calls alone. |
+| **Neon Postgres for Vector Search** | Specialized Vector DBs (Pinecone, Weaviate) | Even though Postgres isn't our primary relational database (Salesforce holds our CRM data), we chose Neon Serverless Postgres because it scales to zero and has a generous free tier, perfectly aligning with our Render free-tier architecture. Furthermore, `pgvector` allows us to store complex metadata (`account_id`, `document_type`) alongside vectors and query them using standard SQL, which is often simpler than the proprietary metadata filtering syntaxes of specialized vector databases. |
 | **Index-Only Neo4j with JIT Salesforce Hydration** | Syncing all properties and replicating Salesforce permissions in Neo4j | Replicating Salesforce's dynamic sharing model externally is an anti-pattern. Accepted the two-step query cost (Neo4j traversal → Salesforce hydration) to guarantee 100% fidelity with native FLS/OLS, ensuring zero data leakage. **Evolved to "Structural Index":** Non-FLS-gated structural fields (Name, Industry, StageName, CloseDate, Type) are now stored in Neo4j to enable graph-native filtering. Financial and PII fields remain JIT-hydrated. |
 | **BFF Pattern** | Direct frontend-to-Salesforce API calls | Traded slightly more backend routing code for enhanced security (hiding API keys) and avoiding complex browser CORS issues. |
 | **Two separate services (Nuxt + Python)** | Monorepo with a single Node process | Keeps language runtimes isolated; each service can be scaled, deployed, and restarted independently on Render. |
+| **Graceful Degradation** | Hard-crashing on missing config | Traded slightly more complex server initialization logic for improved Developer Experience (DX) and modularity. The server dynamically registers tools based on available environment variables, allowing it to boot safely and run core Salesforce tools even if optional databases (Neo4j, Neon) are omitted. |
 | **Public Web Service for MCP Backend** | Render Private Service (Internal Network) | Private Services are paid; unnecessary for a portfolio project. The exposure is already mitigated by architecture: Salesforce tools require a valid OAuth token passed per-request from the BFF (no token = no data), and Neo4j stores only Record IDs and edges (Index-Only Principle), so even direct access yields no business data. The real security boundary is the OAuth token, not network isolation. |
+| **Structured Tool Trace Logging** | Hosted Telemetry Services (e.g. LangSmith, Datadog) | Accepted a local file-based NDJSON logging approach for MCP tool execution traces. This keeps the Nuxt BFF lightweight and avoids third-party observability lock-in while still providing highly structured, grep-able logs for debugging agent hallucinations or tool mis-selections. |
 
 ## 4. Non-Functional Characteristics
 
@@ -143,4 +154,5 @@ The current sync mechanism is an on-demand MCP tool (`sync_salesforce_to_neo4j`)
 |---|---|---|
 | **Latency** | Hardcoded routes are fast (<200ms). Agentic paths add LLM round-trip overhead (1–5s typical). | Agentic responses are not suitable for real-time UI interactions. |
 | **Scalability** | Stateless Nuxt BFF; Python MCP is stateless per-request. | Salesforce API governor limits apply; no request queuing implemented. |
-| **Reliability** | Gemini API key fallback (`GEMINI_API_KEY2`). | No retry logic on MCP tool failures; single-region deployment. |
+| **Reliability** | Gemini API key fallback (`GEMINI_API_KEY2`). Graceful degradation: The MCP server dynamically registers tools, ensuring it boots safely even if Neo4j or Neon are down or unconfigured. | No retry logic on MCP tool failures; single-region deployment. |
+| **Observability** | Pino structured JSON logging (`tool_traces.jsonl`) integrated into the dynamic execution loop. | Logs are written to the local filesystem; not centrally aggregated unless ingested by a cloud provider. |

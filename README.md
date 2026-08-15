@@ -1,8 +1,8 @@
 # Gravity Agent
 
-Gravity is an **AI agent platform** that lets users interact with Salesforce CRM data — including relationship-aware graph queries — through natural language.
+Gravity is an **AI agent platform** that lets users interact with Salesforce CRM data — including relationship-aware graph queries and semantic search over unstructured documents — through natural language.
 
-It bridges a Nuxt 4 web interface, Google Gemini AI, and a Python MCP server into a single integration architecture, backed by Neo4j for multi-hop relationship reasoning.
+It bridges a Nuxt 4 web interface, Google Gemini AI, and a Python MCP server into a single integration architecture. It features modular data capabilities, allowing you to optionally enable Neo4j for multi-hop relationship reasoning and Neon Postgres for vector-based semantic search.
 
 **Live Project:** [View Live on Render](https://gravity-agent-v4.onrender.com)
 
@@ -13,8 +13,9 @@ User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
 ```
 
 - The **Nuxt BFF** handles the UI, Salesforce OAuth, and LLM orchestration.
-- The **Python MCP Server** gives the LLM a set of tools (agentic GraphQL, SOQL, Cypher) to dynamically query Salesforce and Neo4j.
-- **Neo4j AuraDB** stores Salesforce entity relationships as a graph, enabling multi-hop reasoning (e.g., "which accounts have the most high-value opportunities?").
+- The **Python MCP Server** gives the LLM a set of tools (agentic GraphQL, SOQL, Cypher, Vector Search) to dynamically query Salesforce, Neo4j, and Postgres.
+- **Neo4j AuraDB** (Optional) stores Salesforce entity relationships as a graph, enabling multi-hop reasoning (e.g., "which accounts have the most high-value opportunities?").
+- **Neon Postgres** (Optional) uses `pgvector` to store document embeddings, enabling Semantic Search/RAG over unstructured data.
 - **Hardcoded BFF routes** power deterministic UI views (dashboards, forms) without LLM involvement.
 
 > See [architecture.md](./architecture.md) for the full data-flow diagram, responsibility boundaries, and tradeoffs.
@@ -24,7 +25,8 @@ User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
 - **Frontend & API**: Nuxt 4 (Vue 3, TypeScript, Nitro)
 - **AI Integration**: Google Gemini SDK (`@google/genai`)
 - **Agent Tooling**: FastMCP (Python) server
-- **Graph Database**: Neo4j AuraDB (Cypher)
+- **Graph Database**: Neo4j AuraDB (Cypher) - *Optional*
+- **Vector Database**: PostgreSQL/Neon Serverless (`pgvector`) - *Optional*
 - **CRM System**: Salesforce (OAuth 2.0 Connected App)
 - **Deployment**: Render
 
@@ -40,7 +42,8 @@ User → Nuxt BFF → Gemini LLM → Python MCP Server → Salesforce / Neo4j
 - Python (3.10+)
 - Google Gemini API Key
 - Salesforce Developer Org with a configured Connected App/External Client App (OAuth)
-- Neo4j AuraDB instance (free tier available)
+- *(Optional - for Graph Reasoning)*: Neo4j AuraDB instance (free tier available)
+- *(Optional - for Semantic Search/RAG)*: Neon Postgres instance (free tier available)
 
 ### 2. Environment Variables
 
@@ -65,13 +68,25 @@ MCP_SERVER_URL=http://127.0.0.1:8000/sse/
 **MCP Server** — Create a `.env` file inside the `gravity-mcp-core` directory:
 
 ```env
-# Neo4j AuraDB
+# Optional: For Graph Reasoning
 NEO4J_URI=neo4j+ssc://your-instance.databases.neo4j.io
 NEO4J_USERNAME=your_username
 NEO4J_PASSWORD=your_password
+
+# Optional: For Semantic Search / RAG
+NEON_DATABASE_URL=postgres://your_username:your_password@ep-your-instance.region.aws.neon.tech/neondb
 ```
 
-### 3. Running the Python MCP Server
+### 3. Database Setup (Optional)
+
+Depending on which agent capabilities you want to test, you can run the provided setup scripts before starting the server.
+
+> **Note on Graceful Degradation:** The MCP server is fully modular. It will boot perfectly even if you only configure the core Salesforce credentials. It dynamically detects missing environment variables and automatically disables the Graph and Vector tools, ensuring the core app remains resilient.
+
+- **For Semantic Search/RAG**: Run `python db_setup.py` to create the Postgres tables, followed by `python vector_ingestion.py` to embed and load sample documents.
+- **For Graph Reasoning**: Run `python neo4j_ingestion.py` to sync Salesforce data into Neo4j.
+
+### 4. Running the Python MCP Server
 
 > Start the MCP server first — the Nuxt app connects to it on startup.
 
@@ -83,7 +98,7 @@ python server.py
 ```
 *Runs on `http://127.0.0.1:8000`*
 
-### 4. Running the Nuxt Application
+### 5. Running the Nuxt Application
 Open a second terminal and start the frontend:
 ```bash
 cd Nuxt_Agent
