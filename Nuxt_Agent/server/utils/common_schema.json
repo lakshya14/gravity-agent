@@ -1,59 +1,96 @@
 {
-  "Opportunity": {
-    "description": "Represents a sale or pending deal.",
-    "fields": [
-      { "name": "Id", "type": "id", "label": "Opportunity ID" },
-      { "name": "Name", "type": "string", "label": "Name" },
-      { "name": "StageName", "type": "picklist", "label": "Stage" },
-      { "name": "Amount", "type": "currency", "label": "Amount" },
-      { "name": "CloseDate", "type": "date", "label": "Close Date" },
-      { "name": "IsClosed", "type": "boolean", "label": "Closed" },
-      { "name": "IsWon", "type": "boolean", "label": "Won" },
-      { "name": "AccountId", "type": "reference", "label": "Account ID" }
-    ],
-    "exampleQueries": [
-      {
-        "intent": "Show me recent closed won opportunities",
-        "soql": "SELECT Id, Name, Amount, CloseDate FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT 5"
-      },
-      {
-        "intent": "Show me all open opportunities",
-        "soql": "SELECT Id, Name, StageName, Amount, CloseDate FROM Opportunity WHERE IsClosed = false ORDER BY Amount DESC NULLS LAST LIMIT 10"
-      }
-    ]
+  "ToolRoutingScenarios": {
+    "execute_salesforce_soql": {
+      "whenToUse": "Use for exact financial metrics (Amount, Revenue), aggregations (COUNT, MAX, GROUP BY), simple list views, or filtering by strict dates.",
+      "example": "What is the total revenue pipeline for open deals this quarter?"
+    },
+    "query_neo4j_graph": {
+      "whenToUse": "Use for multi-hop relationships, network analysis, or finding paths. Excellent for grouping entities by their relationships.",
+      "example": "Which accounts in the tech industry have the most stalled opportunities?"
+    },
+    "search_vector_docs": {
+      "whenToUse": "Use for unstructured text, call transcripts, meeting notes, sentiment analysis, or asking about specific topics discussed with a client.",
+      "example": "What were the main blockers mentioned in the recent sales calls for Acme Corp?"
+    },
+    "execute_salesforce_graphql": {
+      "whenToUse": "Use ONLY when you need to introspect the schema of an unknown custom object or if you need to fetch standard records when SOQL is not preferred.",
+      "example": "What custom fields exist on the Invoice__c object?"
+    }
   },
-  "Account": {
-    "description": "Represents an individual account, which is an organization or person involved with your business.",
-    "fields": [
-      { "name": "Id", "type": "id", "label": "Account ID" },
-      { "name": "Name", "type": "string", "label": "Account Name" },
-      { "name": "Industry", "type": "picklist", "label": "Industry" },
-      { "name": "Phone", "type": "phone", "label": "Account Phone" },
-      { "name": "Type", "type": "picklist", "label": "Account Type" },
-      { "name": "AnnualRevenue", "type": "currency", "label": "Annual Revenue" }
-    ],
-    "exampleQueries": [
-      {
-        "intent": "Find accounts with highest revenue",
-        "soql": "SELECT Id, Name, Industry, AnnualRevenue FROM Account WHERE AnnualRevenue != null ORDER BY AnnualRevenue DESC LIMIT 5"
-      }
-    ]
-  },
-  "Contact": {
-    "description": "Represents a contact, which is a person associated with an account.",
-    "fields": [
-      { "name": "Id", "type": "id", "label": "Contact ID" },
-      { "name": "FirstName", "type": "string", "label": "First Name" },
-      { "name": "LastName", "type": "string", "label": "Last Name" },
-      { "name": "Email", "type": "email", "label": "Email" },
-      { "name": "Phone", "type": "phone", "label": "Phone" },
-      { "name": "AccountId", "type": "reference", "label": "Account ID" }
-    ],
-    "exampleQueries": [
-      {
-        "intent": "Find a contact by email",
-        "soql": "SELECT Id, FirstName, LastName, Email, Phone, Account.Name FROM Contact WHERE Email = 'example@example.com'"
-      }
-    ]
+  "SalesforceObjects": {
+    "Opportunity": {
+      "description": "Represents a sale or pending deal. Use this to track pipeline.",
+      "fields": [
+        { "name": "Id", "type": "id", "label": "Opportunity ID" },
+        { "name": "Name", "type": "string", "label": "Name" },
+        { "name": "StageName", "type": "picklist", "label": "Stage", "allowedValues": ["Prospecting", "Qualification", "Needs Analysis", "Value Proposition", "Negotiation/Review", "Closed Won", "Closed Lost"] },
+        { "name": "Amount", "type": "currency", "label": "Amount" },
+        { "name": "CloseDate", "type": "date", "label": "Close Date" },
+        { "name": "IsClosed", "type": "boolean", "label": "Closed" },
+        { "name": "IsWon", "type": "boolean", "label": "Won" },
+        { "name": "AccountId", "type": "reference", "label": "Account ID" },
+        { "name": "OwnerId", "type": "reference", "label": "Owner ID" }
+      ],
+      "relationships": [
+        { "relationshipName": "Account", "targetObject": "Account", "type": "parent" },
+        { "relationshipName": "Owner", "targetObject": "User", "type": "parent" }
+      ],
+      "exampleQueries": [
+        {
+          "intent": "Show me recent closed won opportunities",
+          "soql": "SELECT Id, Name, Amount, CloseDate, Account.Name, Owner.Name FROM Opportunity WHERE IsWon = true ORDER BY CloseDate DESC LIMIT 5"
+        }
+      ]
+    },
+    "Account": {
+      "description": "Represents an organization or company involved with your business.",
+      "fields": [
+        { "name": "Id", "type": "id", "label": "Account ID" },
+        { "name": "Name", "type": "string", "label": "Account Name" },
+        { "name": "Industry", "type": "picklist", "label": "Industry", "allowedValues": ["Technology", "Finance", "Healthcare", "Manufacturing", "Retail", "Energy"] },
+        { "name": "Type", "type": "picklist", "label": "Account Type", "allowedValues": ["Customer - Direct", "Customer - Channel", "Prospect", "Technology Partner"] },
+        { "name": "AnnualRevenue", "type": "currency", "label": "Annual Revenue" },
+        { "name": "OwnerId", "type": "reference", "label": "Owner ID" }
+      ],
+      "relationships": [
+        { "relationshipName": "Opportunities", "targetObject": "Opportunity", "type": "child" },
+        { "relationshipName": "Contacts", "targetObject": "Contact", "type": "child" },
+        { "relationshipName": "Owner", "targetObject": "User", "type": "parent" }
+      ],
+      "exampleQueries": [
+        {
+          "intent": "Find accounts and their related open opportunities (Subquery)",
+          "soql": "SELECT Id, Name, (SELECT Id, Name, Amount FROM Opportunities WHERE IsClosed = false) FROM Account LIMIT 5"
+        }
+      ]
+    },
+    "Contact": {
+      "description": "Represents a person associated with an account.",
+      "fields": [
+        { "name": "Id", "type": "id", "label": "Contact ID" },
+        { "name": "FirstName", "type": "string", "label": "First Name" },
+        { "name": "LastName", "type": "string", "label": "Last Name" },
+        { "name": "Email", "type": "email", "label": "Email" },
+        { "name": "AccountId", "type": "reference", "label": "Account ID" }
+      ],
+      "relationships": [
+        { "relationshipName": "Account", "targetObject": "Account", "type": "parent" }
+      ]
+    },
+    "User": {
+      "description": "Represents a sales rep or internal employee who owns records.",
+      "fields": [
+        { "name": "Id", "type": "id", "label": "User ID" },
+        { "name": "Name", "type": "string", "label": "Full Name" },
+        { "name": "Title", "type": "string", "label": "Job Title" },
+        { "name": "IsActive", "type": "boolean", "label": "Active Status" }
+      ],
+      "exampleQueries": [
+        {
+          "intent": "Find a user by name",
+          "soql": "SELECT Id, Name, Title FROM User WHERE Name LIKE '%John%' AND IsActive = true LIMIT 1"
+        }
+      ]
+    }
   }
 }

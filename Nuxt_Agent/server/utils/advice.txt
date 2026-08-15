@@ -1,0 +1,2 @@
+--inspect or something for profiling using chrome dev tools
+Using global Salesforce service instance for better efficiency

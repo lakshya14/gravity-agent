@@ -4,11 +4,23 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const session = await useSession(event, { password: config.sessionPassword });
 
-  if (!session.data.accessToken || !session.data.instanceUrl) {
+  let accessToken = session.data.accessToken;
+  let instanceUrl = session.data.instanceUrl;
+
+  // CI/CD Integration Test Bypass (only active in non-production)
+  if (process.env.NODE_ENV !== 'production') {
+    const overrideToken = getHeader(event, 'x-sf-access-token');
+    const overrideUrl = getHeader(event, 'x-sf-instance-url');
+    if (overrideToken && overrideUrl) {
+      accessToken = overrideToken;
+      instanceUrl = overrideUrl;
+    }
+  }
+
+  if (!accessToken || !instanceUrl) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized. Please login to Salesforce.' });
   }
 
-  const { accessToken, instanceUrl } = session.data;
   const body = await readBody(event);
   const messages = body.messages || [];
   if (!messages.length) {

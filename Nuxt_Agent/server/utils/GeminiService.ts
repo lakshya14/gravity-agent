@@ -2,8 +2,15 @@ import { GoogleGenAI } from '@google/genai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import commonSchema from './common_schema.json';
-import { chatMessage } from '../../types/mcp';
-import {McpToolCallArgs } from '../../types/mcp';
+import { logToolTrace, logger } from './logger';
+import type { chatMessage, McpToolCallArgs } from '../../types/mcp';
+
+/**
+ * Service responsible for orchestrating the Gemini LLM agent.
+ * Handles primary/fallback API key rotation, system prompt generation,
+ * MCP (Model Context Protocol) connection to the Python backend, 
+ * and the dynamic tool execution loop.
+ */
 export class GeminiService {
   private primaryKey: string;
   private fallbackKey?: string;
@@ -22,51 +29,43 @@ export class GeminiService {
   }
 
   private getSystemInstruction(): string {
+    const currentDate = new Date().toISOString().split('T')[0];
+    
     return `You are an intelligent Salesforce Assistant. Your goal is to help the user query their Salesforce data.
-You have access to a common schema cache:
+Today's date is ${currentDate}. Use this for any relative date calculations (e.g., "this month", "last quarter").
+
+You have access to a schema cache and routing rules:
 ${JSON.stringify(commonSchema, null, 2)}
 
-If the user mentions an object but you don't know its exact API name, or if you need to know its fields, use the execute_salesforce_graphql tool with a schema introspection query.
-CRITICAL: You MUST use the execute_salesforce_graphql tool to fetch standard records. 
-If the user asks for aggregate data (like COUNT, MAX, GROUP BY), you MUST use the execute_salesforce_soql tool.
+If the user asks for an object, field, or relationship that is NOT in the cache, you MUST use your schema discovery tools (like find_object_api_name or execute_salesforce_graphql) to introspect the Salesforce schema before writing your query. Never guess custom API names (e.g., __c).
+
 Always format your final response clearly, using Markdown tables or lists as appropriate.
 Do not invent data; only show what the query returns.
 
-When using the query_neo4j_graph tool:
-- The tool returns enriched results hydrated from Salesforce, NOT raw Cypher output.
-- Graph nodes and their structural properties:
-    Account     : id, name, industry, country, type
-    Opportunity : id, name, stageName, closeDate, type
-    User        : id, name, title  (the record owner / sales rep — NOT hydrated from SF)
-- Graph edges:
-    (Account)-[:HAS_OPPORTUNITY]->(Opportunity)
-    (User)-[:OWNS]->(Account)
-    (User)-[:OWNS]->(Opportunity)
-- DO NOT query for Amount, AnnualRevenue, Email, Phone in Cypher — those are hydrated from Salesforce automatically.
-- User nodes are self-contained in the graph (name + title already stored). Return them directly from Cypher — no Salesforce hydration needed.
-- The response includes metadata: \`redacted_count\` (records hidden due to user permissions) and \`truncated_count\` (results capped for performance).
-- If \`redacted_count > 0\`, inform the user that some results were hidden due to their access permissions. Do not speculate about the hidden data.
-- If \`truncated_count > 0\`, inform the user that results were capped and suggest they refine their query.
+--- GRAPH (NEO4J) RULES ---
+When writing Cypher queries, always refer strictly to the schema and hydration rules defined in the \`query_neo4j_graph\` tool description.
 
-FUZZY NAME MATCHING — follow this protocol whenever the user refers to a company, record, or rep by name:
+--- FUZZY NAME MATCHING ---
+Whenever the user refers to a company, record, or rep by name, NEVER use an exact equality check (=). 
+Always use a case-insensitive partial match:
+- In SOQL: Use \`LIKE '%term%'\`
+- In Cypher: Use \`toLower(node.name) CONTAINS toLower('term')\`
 
-STEP 1 — Always search with a case-insensitive partial match, never an exact equality check.
-  For Accounts:      MATCH (a:Account) WHERE toLower(a.name) CONTAINS toLower($term) RETURN a.id, a.name
-  For Users / reps:  MATCH (u:User) WHERE toLower(u.name) CONTAINS toLower($term) RETURN u.id, u.name, u.title
-  Use this as a candidate lookup before writing any traversal query.
-
-STEP 2 — Decide based on what comes back:
-  - EXACTLY ONE result → HIGH CONFIDENCE. Proceed with the full query using that record's id.
-    Disclose to the user: "I'm showing results for **[exact name]** — let me know if you meant someone else."
-  - TWO TO FOUR results → AMBIGUOUS. Do NOT guess. Ask the user:
-    "I found a few matches for '[user term]': [list names]. Which one did you mean?"
-    Wait for confirmation before running the traversal.
-  - FIVE OR MORE results → TOO BROAD. Tell the user their search term is too generic and ask them to be more specific.
-  - ZERO results → NO MATCH. Tell the user no record was found matching that name and suggest checking the spelling.
-
-STEP 3 — Once you have a confirmed id, write the actual Cypher traversal using id-based filtering for precision.`;
+If multiple records match the term:
+- 1 result: Proceed confidently.
+- 2-4 results: STOP. Ask the user: "I found a few matches for '[term]': [list names]. Which one did you mean?"
+- 5+ results: STOP. Tell the user their search term is too generic.`;
   }
 
+  /**
+   * Main entry point for chatting with the agent.
+   * Attempts to fulfill the request using the primary API key,
+   * automatically falling back to the secondary key on rate limits or API outages.
+   * 
+   * @param historyMessages Previous chat history for context.
+   * @param userMessage The new user prompt.
+   * @returns The final text response from the LLM.
+   */
   async executeChat(historyMessages: chatMessage[], userMessage: string): Promise<string> {
     const keys = [this.primaryKey, this.fallbackKey].filter(Boolean) as string[];
 
@@ -93,30 +92,57 @@ STEP 3 — Once you have a confirmed id, write the actual Cypher traversal using
     throw new Error('No API keys configured');
   }
 
+  /**
+   * Determines if a Gemini API error is transient and safe to retry 
+   * using the fallback API key (e.g., rate limits, 5xx errors, network timeouts).
+   */
   private isRetryable(error: any): boolean {
     if (!error) return false;
 
+    // Check HTTP status codes and standard error codes
     const status = error?.status || error?.code || error?.error?.code || error?.error?.status;
     if (status === 429 || status === '429' || status === 'RESOURCE_EXHAUSTED') return true;
     if (typeof status === 'number' && status >= 500) return true;
     if (typeof status === 'string' && (status.startsWith('5') || status === 'UNAVAILABLE')) return true;
 
+    // Check Node.js system error codes
+    const code = error?.code || error?.cause?.code;
+    if (['ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'ECONNREFUSED'].includes(code)) return true;
+    
+    // Check error name
+    if (['FetchError', 'TimeoutError', 'AbortError'].includes(error?.name)) return true;
+
+    // Fallback: check message
     const message = (error?.message || error?.error?.message || '').toLowerCase();
-    return ['timeout', 'network', 'unreachable', 'fetch failed', 'econnreset', 'enotfound', 'econnrefused', 'high demand']
+    return ['timeout', 'network', 'unreachable', 'fetch failed', 'high demand']
       .some(keyword => message.includes(keyword));
   }
 
+  /**
+   * Core agent execution flow:
+   * 1. Establishes an SSE connection to the Python FastMCP server, passing OAuth tokens via headers.
+   * 2. Dynamically fetches available Salesforce/Neo4j tools.
+   * 3. Initializes Gemini with the system prompt and available tools.
+   * 4. Enters a dynamic execution loop, resolving parallel tool calls requested by the LLM
+   *    until it provides a final text response or hits the recursion limit (5 iterations).
+   */
   private async runChat(apiKey: string, historyMessages: chatMessage[], userMessage: string): Promise<string> {
     if (!apiKey) throw new Error("API Key is missing");
     
     // 1. Establish the MCP Connection
-    // We pass the auth tokens as query parameters to the Python server's SSE endpoint
+    // We pass the auth tokens as custom headers to the Python server's SSE endpoint
     const mcpUrl = new URL(this.mcpServerUrl);
-    mcpUrl.searchParams.append('access_token', this.accessToken);
-    mcpUrl.searchParams.append('instance_url', this.instanceUrl);
-    mcpUrl.searchParams.append('correlation_id', this.reqId);
+    
+    const headers = {
+      'x-sf-access-token': this.accessToken,
+      'x-sf-instance-url': this.instanceUrl,
+      'x-correlation-id': this.reqId
+    };
 
-    const transport = new SSEClientTransport(mcpUrl);
+    const transport = new SSEClientTransport(mcpUrl, {
+      eventSourceInit: { headers } as any,
+      requestInit: { headers }
+    });
     const mcpClient = new Client({ name: "nuxt-agent", version: "1.0.0" }, { capabilities: {} });
     
     await mcpClient.connect(transport);
@@ -146,33 +172,49 @@ STEP 3 — Once you have a confirmed id, write the actual Cypher traversal using
 
       let response = await chat.sendMessage({ message: userMessage });
       let iterations = 0;
-
+      logger.debug({ functionCalls: response.functionCalls }, 'LLM response function calls');
       // 4. Dynamic Execution Loop — limit is 5 to support:
       //    fuzzy-match lookup (1) + traversal (2) + follow-up tool calls for complex multi-hop queries (3-5)
       while (response.functionCalls && response.functionCalls.length > 0 && iterations < 5) {
         iterations++;
-        const functionCall = response.functionCalls[0];
         
-        // Instead of an if/else block, we blindly forward the request to the MCP server!
-        const result = await mcpClient.callTool({
-          name: functionCall.name,
-          arguments: functionCall.args as McpToolCallArgs 
-        });
+        const functionResponses = await Promise.all(response.functionCalls.map(async (functionCall) => {
+          // Forward the request to the MCP server
+          const result = await mcpClient.callTool({
+            name: functionCall.name!,
+            arguments: functionCall.args as McpToolCallArgs 
+          });
 
-        // Gemini expects the response inside an object
-        const formattedResult = { data: result.content };
+          const formattedResult = { data: result.content };
 
-        response = await chat.sendMessage({
-          message: [{
-            functionResponse: {
+          // 5. Structured Tool Trace Logging (Async, non-blocking)
+          logToolTrace({
+            correlationId: this.reqId,
+            iteration: iterations,
+            functionCall: {
               name: functionCall.name,
+              args: functionCall.args
+            },
+            functionResponse: formattedResult
+          });
+
+          return {
+            functionResponse: {
+              name: functionCall.name!,
               response: formattedResult
             }
-          }]
-        });
+          };
+        }));
+
+        // SDK type doesn't expose the functionResponse[] overload; cast is intentional
+        response = await chat.sendMessage({ message: functionResponses as any });
       }
 
-      return response.text;
+      if (iterations >= 5 && !response.text) {
+        return "I needed to look up too many things at once and reached my limit. Could you please narrow down your request?";
+      }
+
+      return response.text || "";
     } finally {
       await transport.close();
     }
