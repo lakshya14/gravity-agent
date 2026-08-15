@@ -20,7 +20,7 @@ def setup_constraints(neo4j_service: Neo4jService):
     return {"success": True, "message": "Constraints verified"}
 
 
-def ingest_accounts(sf_service: SalesforceService, neo4j_service: Neo4jService):
+async def ingest_accounts(sf_service: SalesforceService, neo4j_service: Neo4jService):
     """
     Syncs Accounts into Neo4j with structural (non-FLS-sensitive) properties
     and creates [:OWNS] edges from the owning User to each Account.
@@ -36,7 +36,7 @@ def ingest_accounts(sf_service: SalesforceService, neo4j_service: Neo4jService):
 
     # OwnerId + Owner.Name/Title included for User node creation
     soql = "SELECT Id, Name, Industry, BillingCountry, Type, OwnerId, Owner.Name, Owner.Title FROM Account"
-    sf_response = sf_service.run_soql_query(soql)
+    sf_response = await sf_service.run_soql_query(soql)
     accounts = sf_response.get("records", [])
 
     if not accounts:
@@ -76,7 +76,7 @@ def ingest_accounts(sf_service: SalesforceService, neo4j_service: Neo4jService):
     return {"success": True, "message": f"Ingested {len(accounts)} Accounts with structural properties and owner edges"}
 
 
-def ingest_opportunities(sf_service: SalesforceService, neo4j_service: Neo4jService):
+async def ingest_opportunities(sf_service: SalesforceService, neo4j_service: Neo4jService):
     """
     Syncs Opportunities into Neo4j with structural (non-FLS-sensitive) properties,
     [:HAS_OPPORTUNITY] edges from Accounts, and [:OWNS] edges from owning Users.
@@ -92,7 +92,7 @@ def ingest_opportunities(sf_service: SalesforceService, neo4j_service: Neo4jServ
 
     # OwnerId + Owner.Name/Title included for User node creation
     soql = "SELECT Id, AccountId, Name, StageName, CloseDate, Type, OwnerId, Owner.Name, Owner.Title FROM Opportunity"
-    sf_response = sf_service.run_soql_query(soql)
+    sf_response = await sf_service.run_soql_query(soql)
     opportunities = sf_response.get("records", [])
 
     if not opportunities:

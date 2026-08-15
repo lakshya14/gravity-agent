@@ -27,7 +27,7 @@ class HydrationService:
 
     MAX_HYDRATION_BATCH = 50
 
-    def hydrate(self, neo4j_results: list[dict[str, Any]], sf_service: SalesforceService) -> dict[str, Any]:
+    async def hydrate(self, neo4j_results: list[dict[str, Any]], sf_service: SalesforceService) -> dict[str, Any]:
         """
         Orchestrates the full hydration pipeline:
         1. Extract & classify Salesforce IDs from Neo4j results.
@@ -62,7 +62,7 @@ class HydrationService:
             logger.info("Short-circuit applied: capped at %d IDs, truncated %d", self.MAX_HYDRATION_BATCH, truncated_count)
 
         # Phase 3: Batch-fetch from Salesforce (permission-safe)
-        hydrated_lookup = self._batch_fetch(ids_by_type, sf_service)
+        hydrated_lookup = await self._batch_fetch(ids_by_type, sf_service)
 
         # Phase 4: Merge hydrated data and compute redaction
         ids_requested = set()
@@ -137,7 +137,7 @@ class HydrationService:
         return capped
 
     @staticmethod
-    def _batch_fetch(ids_by_type: dict[str, list[str]], sf_service: SalesforceService) -> dict[str, dict]:
+    async def _batch_fetch(ids_by_type: dict[str, list[str]], sf_service: SalesforceService) -> dict[str, dict]:
         """
         Calls SalesforceService.fetch_records_by_ids for each object type
         and builds a unified lookup dict keyed by Salesforce Record ID.
@@ -148,7 +148,7 @@ class HydrationService:
             if not record_ids:
                 continue
 
-            response = sf_service.fetch_records_by_ids(object_name, record_ids)
+            response = await sf_service.fetch_records_by_ids(object_name, record_ids)
             records = response.get("records", [])
 
             for record in records:
@@ -199,12 +199,29 @@ class HydrationService:
     def _enrich_row(obj: Any, lookup: dict[str, dict]) -> Any:
         """
         Recursively replaces raw Salesforce IDs with their hydrated record dicts.
-        If an ID is found in the lookup, it's replaced with the full record.
+        If a dictionary represents a Neo4j node (e.g., has an 'id' containing a SF ID),
+        it merges the hydrated record directly into the dictionary.
         Nested dicts and lists are traversed recursively.
         """
         if isinstance(obj, str) and HydrationService._is_salesforce_id(obj):
             return lookup.get(obj, obj)
         elif isinstance(obj, dict):
+            # Check if this dict represents a Neo4j node with an 'id'
+            node_id = obj.get("id")
+            if isinstance(node_id, str) and HydrationService._is_salesforce_id(node_id):
+                hydrated_data = lookup.get(node_id)
+                if hydrated_data:
+                    # Merge hydrated data into a new dict, overriding with SF truth
+                    merged = {**obj, **hydrated_data}
+                    
+                    # Remove the redundant lowercase string 'id' from Neo4j 
+                    # since Salesforce provides 'Id'
+                    if "Id" in merged and "id" in merged:
+                        del merged["id"]
+                        
+                    return {key: HydrationService._enrich_row(value, lookup) for key, value in merged.items()}
+            
+            # Standard dict processing
             return {key: HydrationService._enrich_row(value, lookup) for key, value in obj.items()}
         elif isinstance(obj, list):
             return [HydrationService._enrich_row(item, lookup) for item in obj]

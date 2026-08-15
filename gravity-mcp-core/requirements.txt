@@ -3,7 +3,7 @@
 fastapi
 uvicorn
 mcp
-requests
+httpx
 pydantic>=2.8.0
 neo4j
 python-dotenv
