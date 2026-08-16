@@ -1,0 +1,49 @@
+name: Trigger auto deployment for gravity-mcp
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ v5 ]
+    paths:
+    - '**'
+    - '.github/workflows/gravity-mcp-AutoDeployTrigger-30339c0a-3107-4eee-b019-45956dd7f9d3.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write #This is required for requesting the OIDC JWT Token
+      contents: read #Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.GRAVITYMCP_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.GRAVITYMCP_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.GRAVITYMCP_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          _targetLabelKey_: _targetLabel_
+          registryUrl: ghcr.io
+          registryUsername: ${{ secrets.GRAVITYMCP_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.GRAVITYMCP_REGISTRY_PASSWORD }}
+          containerAppName: gravity-mcp
+          resourceGroup: gravity-rg
+          imageToBuild: ghcr.io/gravity-mcp:${{ github.sha }}
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
