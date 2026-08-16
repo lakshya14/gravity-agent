@@ -42,7 +42,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-      
+    outputs:
+      image-tag: ${{ steps.meta-nuxt.outputs.version }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -70,6 +72,37 @@ jobs:
           push: true
           tags: ${{ steps.meta-nuxt.outputs.tags }}
           labels: ${{ steps.meta-nuxt.outputs.labels }}
+
+  deploy-nuxt:
+    needs: build-and-push-nuxt
+    name: Deploy Nuxt to Azure Container App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy new image and sync env vars
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az containerapp update \
+              --name ${{ secrets.AZURE_CONTAINER_APP_NAME }} \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --image ${{ env.REGISTRY }}/${{ env.NUXT_IMAGE_NAME }}:${{ needs.build-and-push-nuxt.outputs.image-tag }} \
+              --set-env-vars \
+                NUXT_SALESFORCE_CLIENT_ID="${{ secrets.SALESFORCE_CLIENT_ID }}" \
+                NUXT_SALESFORCE_CLIENT_SECRET="${{ secrets.SALESFORCE_CLIENT_SECRET }}" \
+                NUXT_SALESFORCE_LOGIN_URL="https://login.salesforce.com" \
+                NUXT_GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+                NUXT_GEMINI_API_KEY2="${{ secrets.GEMINI_API_KEY2 }}" \
+                NUXT_SESSION_PASSWORD="${{ secrets.NUXT_SESSION_PASSWORD }}" \
+                NUXT_NEON_DATABASE_URL="${{ secrets.NEON_DATABASE_URL }}" \
+                NUXT_APP_BASE_URL="${{ secrets.APP_BASE_URL }}" \
+                NUXT_MCP_SERVER_URL="${{ secrets.MCP_SERVER_URL }}"
 
   build-and-push-mcp:
     needs: changes
