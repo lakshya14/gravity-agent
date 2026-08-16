@@ -2,7 +2,7 @@
 # enev\Scripts\Activate
 fastapi
 uvicorn
-mcp
+mcp>=1.28.0
 httpx
 pydantic>=2.8.0
 neo4j
