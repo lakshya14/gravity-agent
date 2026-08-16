@@ -4,6 +4,7 @@ fastapi
 uvicorn
 mcp>=1.28.0
 httpx
+structlog
 pydantic>=2.8.0
 neo4j
 python-dotenv
