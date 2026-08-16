@@ -6,7 +6,6 @@ import google.genai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 DATABASE_URL = os.getenv("NEON_DATABASE_URL")
 
 class VectorService:
@@ -26,12 +25,16 @@ class VectorService:
             maxconn=5,
             dsn=DATABASE_URL
         )
+        # Gemini client is initialized here (not at module level) so that a missing
+        # GEMINI_API_KEY does not crash the process on import when VectorService
+        # is never instantiated (i.e., when NEON_DATABASE_URL is absent).
+        self._gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     def get_embedding(self, text: str) -> list[float]:
         """
         Calls the Gemini API to get the vector embedding for a piece of text.
         """
-        result = gemini_client.models.embed_content(
+        result = self._gemini_client.models.embed_content(
             model="gemini-embedding-2", 
             contents=text,
             config=dict(output_dimensionality=768)
