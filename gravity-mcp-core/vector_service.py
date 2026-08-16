@@ -18,13 +18,21 @@ class VectorService:
     within an asyncio application.
     """
     def __init__(self):
-        # Connection pool: min 1, max 5 connections — reused across all searches.
-        # ThreadedConnectionPool is thread-safe: safe to use with asyncio.to_thread().
-        self._pool = psycopg2.pool.ThreadedConnectionPool(
-            minconn=1,
-            maxconn=5,
-            dsn=DATABASE_URL
-        )
+        # ThreadedConnectionPool opens minconn=1 real TCP connections immediately.
+        # Wrap in try/except so a Neon DNS/network failure at container startup
+        # doesn't kill the whole process — the server still starts, and the
+        # affected tool returns a descriptive error instead.
+        try:
+            self._pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=1,
+                maxconn=5,
+                dsn=DATABASE_URL
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"VectorService: failed to connect to Neon database at startup. "
+                f"Check NEON_DATABASE_URL is correct and the host is reachable. Error: {e}"
+            ) from e
         # Gemini client is initialized here (not at module level) so that a missing
         # GEMINI_API_KEY does not crash the process on import when VectorService
         # is never instantiated (i.e., when NEON_DATABASE_URL is absent).

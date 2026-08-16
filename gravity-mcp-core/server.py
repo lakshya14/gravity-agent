@@ -62,8 +62,11 @@ hydration_service = HydrationService()
 # Its internal ThreadedConnectionPool is reused across all tool calls.
 vector_service = None
 if os.getenv("NEON_DATABASE_URL"):
-    vector_service = VectorService()
-    logger.info("VectorService initialized successfully.")
+    try:
+        vector_service = VectorService()
+        logger.info("VectorService initialized successfully.")
+    except Exception as e:
+        logger.error(f"VectorService failed to initialize — vector search will be DISABLED. Error: {e}")
 else:
     logger.warning("NEON_DATABASE_URL missing. Vector search tools will be DISABLED.")
 
@@ -73,12 +76,15 @@ else:
 NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
 chat_history_pool = None
 if NEON_DATABASE_URL:
-    chat_history_pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=1,
-        maxconn=3,
-        dsn=NEON_DATABASE_URL
-    )
-    logger.info("chat_history_pool initialized successfully.")
+    try:
+        chat_history_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=1,
+            maxconn=3,
+            dsn=NEON_DATABASE_URL
+        )
+        logger.info("chat_history_pool initialized successfully.")
+    except Exception as e:
+        logger.error(f"chat_history_pool failed to initialize — conversation search will be DISABLED. Error: {e}")
 
 # Define tools using FastMCP
 if neo4j_service:
