@@ -1,6 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
+  srcDir: '.',
   devtools: { enabled: process.env.NODE_ENV !== 'production' },
   pages: true,
   modules: ['@pinia/nuxt', '@pinia-plugin-persistedstate/nuxt', '@nuxt/eslint'],
